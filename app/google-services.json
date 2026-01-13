@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "944609836644",
+    "project_id": "antiaddictionapp-53bde",
+    "storage_bucket": "antiaddictionapp-53bde.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:944609836644:android:fab327b69a080beee32971",
+        "android_client_info": {
+          "package_name": "com.exampl.antiaddiction"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBr06WzDCbGI8wpC24LG6--GdZYWhDblXU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

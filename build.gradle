@@ -1,4 +1,15 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
+// 注意：这里的 buildscript 块不再需要 repositories {}
+buildscript {
+    dependencies {
+        // 这里只保留插件的 classpath 声明，例如：
+        classpath 'com.google.gms:google-services:4.4.4' // 保持和上面 plugins 块中的版本一致
+    }
+}
 plugins {
 alias(libs.plugins.androidApplication) apply false
+    // Add the dependency for the Google services Gradle plugin
+    id 'com.google.gms.google-services' version '4.4.4' apply false
+
 }
+
