@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <RadioGroup
+        android:id="@+id/roleGroup"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="20dp">
+        <RadioButton
+            android:id="@+id/radioChild"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="我是孩子"
+            android:checked="true"/>
+        <RadioButton
+            android:id="@+id/radioParent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="我是家长" />
+    </RadioGroup>
+    <Button
+        android:id="@+id/btnLogin"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="开始使用" />
+
+</LinearLayout>
