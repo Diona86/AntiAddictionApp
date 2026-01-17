@@ -5,15 +5,89 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    android:background="#F4F6F8"
+    tools:context=".activity.MainActivity">
 
+    <!-- 顶部状态栏 -->
+    <LinearLayout
+        android:id="@+id/header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="24dp"
+        android:orientation="vertical"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="今日使用报告"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="#1A1A1A"/>
+    </LinearLayout>
+
+    <!-- 总时长大卡片 -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/timeCard"
+        android:layout_width="match_parent"
+        android:layout_height="160dp"
+        android:layout_marginHorizontal="20dp"
+        app:cardCornerRadius="20dp"
+        app:cardBackgroundColor="#FFFFFF"
+        app:layout_constraintTop_toBottomOf="@id/header">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="20dp">
+
+            <TextView
+                android:id="@+id/labelTotal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="今日总使用时长"
+                android:textColor="#666666"/>
+
+            <TextView
+                android:id="@+id/txtTotalTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/labelTotal"
+                android:layout_marginTop="8dp"
+                android:text="00h 00m"
+                android:textSize="36sp"
+                android:textStyle="bold"
+                android:textColor="#3F51B5"/>
+
+            <ProgressBar
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="8dp"
+                android:layout_alignParentBottom="true"
+                android:progress="65"
+                android:progressDrawable="@drawable/custom_progress_bar"/>
+        </RelativeLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- 列表标题 -->
     <TextView
+        android:id="@+id/listTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Hello World!"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:text="应用明细"
+        android:textStyle="bold"
+        android:layout_margin="20dp"
+        app:layout_constraintTop_toBottomOf="@id/timeCard"
+        app:layout_constraintStart_toStartOf="parent"/>
+
+    <!-- 数据展示列表 -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvUsage"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:paddingHorizontal="10dp"
+        app:layout_constraintTop_toBottomOf="@id/listTitle"
+        app:layout_constraintBottom_toBottomOf="parent"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
