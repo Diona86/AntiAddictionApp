@@ -13,6 +13,7 @@ import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
@@ -31,6 +32,7 @@ import com.google.firebase.FirebaseApp;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
@@ -82,27 +84,40 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return list;
-        // --- 最后把数据交给 RecyclerView ---
-        // 假设你已经在 onCreate 里初始化了 adapter
-        // adapter.updateData(list);
     }
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
         FirebaseApp.initializeApp(this);
         Log.d("ANTI_LOG","正在查看相关权限");
+        ProgressBar pb=findViewById(R.id.pbPerDay);
         if(!hasUsageStatsPermission())
             startActivities(new Intent[]{new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)});
         else
             Log.d("ANTI_LOG","已授权应用使用查看权限");
         RecyclerView rvUsage = findViewById(R.id.rvUsage);
         rvUsage.setLayoutManager(new LinearLayoutManager(this));
-        UsageAdapter adapter=new UsageAdapter(getUsageStats());
+        List<AppUsageInfo> list=getUsageStats();
+        // 降序排序
+        Collections.sort(list, (o1, o2) -> Long.compare(o2.usageTime, o1.usageTime));
+        UsageAdapter adapter=new UsageAdapter(list);
         rvUsage.setAdapter(adapter);
         TextView txtTotalTime = findViewById(R.id.txtTotalTime);
-        txtTotalTime.setText(txtTotalTime.getText());
+        long totalTime = 0;
+        for (AppUsageInfo appInfo:list){
+            totalTime+=appInfo.usageTime;
+        }
+        pb.setMax(100);
+        double ratio = (double) totalTime / (1000 * 60 * 60 * 24);
+        int value = (int) (ratio * 100);
+
+        Log.d("ANTI_LOG","进度条值为："+value);
+        pb.setProgress(value,true);   // 30%
+
+        txtTotalTime.setText(formatTime(totalTime));
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
