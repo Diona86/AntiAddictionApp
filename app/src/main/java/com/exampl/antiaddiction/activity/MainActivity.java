@@ -2,7 +2,9 @@ package com.exampl.antiaddiction.activity;
 
 import static com.exampl.antiaddiction.utils.Utils.formatTime;
 
+import android.annotation.SuppressLint;
 import android.app.AppOpsManager;
+import androidx.fragment.app.Fragment;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
@@ -27,7 +29,12 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.exampl.antiaddiction.R;
 import com.exampl.antiaddiction.adapter.UsageAdapter;
+import com.exampl.antiaddiction.fragment.ClockFragment;
+import com.exampl.antiaddiction.fragment.ProfileFragment;
+import com.exampl.antiaddiction.fragment.StatFragment;
+import com.exampl.antiaddiction.fragment.TodoFragment;
 import com.exampl.antiaddiction.model.AppUsageInfo;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.firebase.FirebaseApp;
 
 import java.util.ArrayList;
@@ -43,82 +50,47 @@ public class MainActivity extends AppCompatActivity {
                 android.os.Process.myUid(),getPackageName());
         return mode==AppOpsManager.MODE_ALLOWED;
     }
-    public List<AppUsageInfo> getUsageStats() {
-        UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-        PackageManager pm = getPackageManager(); // 获取管家实例
-
-        List<AppUsageInfo> list = new ArrayList<>();
-        long endTime = System.currentTimeMillis();
-        long startTime = endTime - 1000 * 60 * 60 * 24; // 最近 24 小时
-
-        List<UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
-
-        if (stats != null) {
-            for (UsageStats usageStats : stats) {
-                long totalTime = usageStats.getTotalTimeInForeground();
-                if (totalTime > 0) {
-                    String packageName = usageStats.getPackageName();
-
-                    String appName = "";
-                    Drawable appIcon = null;
-
-                    try {
-                        // --- 核心点：通过包名拿应用信息 ---
-                        ApplicationInfo ai = pm.getApplicationInfo(packageName, 0);
-                        appName = pm.getApplicationLabel(ai).toString(); // 拿到应用名（如：微信）
-                        appIcon = pm.getApplicationIcon(ai);            // 拿到图标 Drawable
-                    } catch (PackageManager.NameNotFoundException e) {
-                        // 如果应用刚被卸载，可能找不到，给个默认值
-                        appName = packageName;
-                        appIcon = ContextCompat.getDrawable(this, R.mipmap.ic_launcher);
-                    }
-
-                    // 转换时间格式（把毫秒转成 01h 20m 这种）
-                    String timeStr = formatTime(totalTime);
-
-                    // 添加到你刚才写的 List 里
-                    list.add(new AppUsageInfo(appName, packageName, appIcon, totalTime, timeStr));
-
-                    Log.d("ANTI_LOG", "应用：" + appName + " 时长：" + timeStr);
-                }
-            }
-        }
-        return list;
-    }
+    @SuppressLint("MissingInflatedId")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
 
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
-        FirebaseApp.initializeApp(this);
+
         Log.d("ANTI_LOG","正在查看相关权限");
-        ProgressBar pb=findViewById(R.id.pbPerDay);
+
         if(!hasUsageStatsPermission())
             startActivities(new Intent[]{new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)});
         else
             Log.d("ANTI_LOG","已授权应用使用查看权限");
-        RecyclerView rvUsage = findViewById(R.id.rvUsage);
-        rvUsage.setLayoutManager(new LinearLayoutManager(this));
-        List<AppUsageInfo> list=getUsageStats();
-        // 降序排序
-        Collections.sort(list, (o1, o2) -> Long.compare(o2.usageTime, o1.usageTime));
-        UsageAdapter adapter=new UsageAdapter(list);
-        rvUsage.setAdapter(adapter);
-        TextView txtTotalTime = findViewById(R.id.txtTotalTime);
-        long totalTime = 0;
-        for (AppUsageInfo appInfo:list){
-            totalTime+=appInfo.usageTime;
+        BottomNavigationView nav=findViewById(R.id.bottomNav);
+        if(savedInstanceState==null){
+            getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.mainFragmentContainer,new StatFragment())
+                    .commit();
         }
-        pb.setMax(100);
-        double ratio = (double) totalTime / (1000 * 60 * 60 * 24);
-        int value = (int) (ratio * 100);
+        nav.setOnItemSelectedListener(item->{
+            Fragment selectedFragment =null;
+            int id =item.getItemId();
+            if (id == R.id.nav_stat) {
+                selectedFragment = new StatFragment();
+            } else if (id == R.id.nav_todo) {
+                selectedFragment = new TodoFragment();
+            } else if (id == R.id.nav_clock) {
+                selectedFragment = new ClockFragment();
+            } else if (id == R.id.nav_profile) {
+                selectedFragment = new ProfileFragment();
+            }
+            if(selectedFragment!=null){
+                getSupportFragmentManager().beginTransaction()
+                        .replace(R.id.mainFragmentContainer,selectedFragment)
+                        .commit();
+            }
+            return  true;
+        });
 
-        Log.d("ANTI_LOG","进度条值为："+value);
-        pb.setProgress(value,true);   // 30%
-
-        txtTotalTime.setText(formatTime(totalTime));
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main_root), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
