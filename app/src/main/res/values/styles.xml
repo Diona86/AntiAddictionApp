@@ -4,5 +4,13 @@
     <style name="circleImageStyle">
         <item name="cornerSize" >50%</item>
     </style>
-
+    <!-- 图片底部圆角样式 -->
+    <style name="bottomRoundedStyle">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSizeBottomLeft">40dp</item>
+        <item name="cornerSizeBottomRight">40dp</item>
+        <!-- 确保顶部的圆角为 0，这样只有底部是弯的 -->
+        <item name="cornerSizeTopLeft">0dp</item>
+        <item name="cornerSizeTopRight">0dp</item>
+    </style>
 </resources>
