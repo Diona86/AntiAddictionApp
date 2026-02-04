@@ -3,9 +3,15 @@ package com.exampl.antiaddiction.model;
 public class UserInfo {
     private Long id;
     private String username;
+    private String password;
     private String nickname;
     private String role;
     private Long boundUserId;
+    public  UserInfo(String username,String password,String role){
+        this.username=username;
+        this.password=password;
+        this.role=role;
+    }
     public Long getBoundUserId() {
         return boundUserId;
     }
