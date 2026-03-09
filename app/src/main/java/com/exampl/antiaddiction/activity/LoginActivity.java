@@ -17,6 +17,7 @@ import com.exampl.antiaddiction.R;
 import com.exampl.antiaddiction.api.ApiService;
 import com.exampl.antiaddiction.model.Result;
 import com.exampl.antiaddiction.model.UserInfo;
+import com.exampl.antiaddiction.utils.Utils;
 import com.google.android.material.textfield.TextInputEditText;
 
 import retrofit2.Call;
@@ -31,6 +32,7 @@ public class LoginActivity extends AppCompatActivity {
     private TextInputEditText etPassword;
     private RadioButton radioChild;
     private Button btnLogin;
+    private Button testLogin;
     private ApiService apiService;
 
     @Override
@@ -40,6 +42,7 @@ public class LoginActivity extends AppCompatActivity {
 
         // 初始化控件
         etUsername = findViewById(R.id.etUsername);
+        testLogin =findViewById(R.id.tsLogin);
         etPassword = findViewById(R.id.etPassword);
         radioChild = findViewById(R.id.radioChild);
         btnLogin = findViewById(R.id.btnLogin);
@@ -61,6 +64,9 @@ public class LoginActivity extends AppCompatActivity {
 
         // 登录按钮
         btnLogin.setOnClickListener(v -> login());
+        testLogin.setOnClickListener(v->{
+            Utils.jumpPage(LoginActivity.this,MainActivity.class,"",null);
+        });
 
         // 设置窗口边距
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.login), (v, insets) -> {
@@ -111,18 +117,14 @@ public class LoginActivity extends AppCompatActivity {
                         Toast.makeText(LoginActivity.this,
                                 "登录成功", Toast.LENGTH_SHORT).show();
 
-                        // 跳转到主页
-                        Intent intent = new Intent(LoginActivity.this, MainActivity.class);
-                        intent.putExtra("USER_ROLE", role);  // 注意拼写：USER 不是 UESR
 
-                        // 可选：传递用户信息
-                        if (result.getData() != null) {
-                            intent.putExtra("USER_ID", result.getData().getId());
-                            intent.putExtra("USERNAME", result.getData().getUsername());
-                        }
 
-                        startActivity(intent);
-                        finish();
+//                        // 可选：传递用户信息
+//                        if (result.getData() != null) {
+//                            intent.putExtra("USER_ID", result.getData().getId());
+//                            intent.putExtra("USERNAME", result.getData().getUsername());
+//                        }
+                        Utils.jumpPage(LoginActivity.this,MainActivity.class,"role",role);
 
                     } else {
                         // ❌ 登录失败（用户名或密码错误等）

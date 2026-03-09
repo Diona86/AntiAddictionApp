@@ -1,5 +1,13 @@
 package com.exampl.antiaddiction.utils;
 
+import static androidx.core.content.ContextCompat.startActivity;
+
+import android.app.Activity;
+import android.content.Intent;
+
+import com.exampl.antiaddiction.activity.LoginActivity;
+import com.exampl.antiaddiction.activity.MainActivity;
+
 public class Utils {
     static public String formatTime(long millis) {
         long seconds = millis / 1000;
@@ -12,4 +20,11 @@ public class Utils {
             return String.format("%02dm %02ds", minutes, seconds % 60);
         }
     }
+    static public void jumpPage(Activity activity,Class<?> targetClass,String msgName,String value){
+        Intent intent = new Intent(activity, targetClass);
+        intent.putExtra(msgName, value);  // 注意拼写：USER 不是 UESR
+        activity.startActivity(intent);
+        activity.finish();
+    }
+
 }

@@ -9,4 +9,5 @@
     <string name="invalid_username">Not a valid username</string>
     <string name="invalid_password">Password must be >5 characters</string>
     <string name="login_failed">"Login failed"</string>
+    <string-array name="priority_array"> <item>高</item> <item>中</item> <item>低</item> </string-array>
 </resources>

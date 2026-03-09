@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F2F5F9">
+
+    <!-- 顶部标题 -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="20dp">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="我的看板"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#1A1A1A"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnAddTodo"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:text="新增任务"
+            app:icon="@android:drawable/ic_menu_add" />
+    </RelativeLayout>
+
+    <!-- 横向滚动的看板区 -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp">
+
+            <!-- 待处理列 (Todo) -->
+            <include layout="@layout/layout_kanban_column" android:id="@+id/colTodo" />
+
+            <!-- 进行中列 (In Process) -->
+            <include layout="@layout/layout_kanban_column" android:id="@+id/colProcessing" />
+
+            <!-- 已完成列 (Done) -->
+            <include layout="@layout/layout_kanban_column" android:id="@+id/colDone" />
+
+        </LinearLayout>
+    </HorizontalScrollView>
+</LinearLayout>
