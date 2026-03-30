@@ -20,6 +20,10 @@ public class Utils {
             return String.format("%02dm %02ds", minutes, seconds % 60);
         }
     }
+    /**
+     * 自身activity
+     * 目标class
+     * **/
     static public void jumpPage(Activity activity,Class<?> targetClass,String msgName,String value){
         Intent intent = new Intent(activity, targetClass);
         intent.putExtra(msgName, value);  // 注意拼写：USER 不是 UESR

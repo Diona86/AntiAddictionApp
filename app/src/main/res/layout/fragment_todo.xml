@@ -6,49 +6,89 @@
     android:orientation="vertical"
     android:background="#F2F5F9">
 
-    <!-- 顶部标题 -->
-    <RelativeLayout
+    <!-- 当前看板标题 + 新增按钮 -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="20dp">
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="我的看板"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:textColor="#1A1A1A"/>
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp"
+        android:background="#FFFFFF"
+        android:elevation="2dp">
 
+        <!-- 看板颜色小圆点（后续动态设置） -->
+        <View
+            android:id="@+id/view_board_color"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:background="@drawable/circle_blue"
+            android:layout_marginEnd="12dp" />
+
+        <!-- 当前看板名称 -->
+        <TextView
+            android:id="@+id/tv_current_board"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="默认看板"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#1A1A1A" />
+
+        <!-- 新增任务按钮 -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnAddTodo"
             style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_alignParentEnd="true"
             android:text="新增任务"
-            app:icon="@android:drawable/ic_menu_add" />
-    </RelativeLayout>
+            app:icon="@android:drawable/ic_menu_add"
+            app:iconGravity="textStart" />
+    </LinearLayout>
 
-    <!-- 横向滚动的看板区 -->
+    <!-- 分隔线 -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#E0E0E0" />
+
+    <!-- 横向滚动看板区（优化列间距） -->
     <HorizontalScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scrollbars="none">
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scrollbars="none"
+        android:paddingHorizontal="8dp"
+        android:clipToPadding="false">
 
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
-            android:orientation="horizontal"
-            android:paddingHorizontal="10dp">
+            android:orientation="horizontal">
 
-            <!-- 待处理列 (Todo) -->
-            <include layout="@layout/layout_kanban_column" android:id="@+id/colTodo" />
+            <!-- 待处理列 -->
+            <include
+                layout="@layout/layout_kanban_column"
+                android:id="@+id/colTodo"
+                android:layout_width="320dp"
+                android:layout_height="match_parent"
+                android:layout_marginHorizontal="8dp" />
 
-            <!-- 进行中列 (In Process) -->
-            <include layout="@layout/layout_kanban_column" android:id="@+id/colProcessing" />
+            <!-- 进行中列 -->
+            <include
+                layout="@layout/layout_kanban_column"
+                android:id="@+id/colProcessing"
+                android:layout_width="320dp"
+                android:layout_height="match_parent"
+                android:layout_marginHorizontal="8dp" />
 
-            <!-- 已完成列 (Done) -->
-            <include layout="@layout/layout_kanban_column" android:id="@+id/colDone" />
+            <!-- 已完成列 -->
+            <include
+                layout="@layout/layout_kanban_column"
+                android:id="@+id/colDone"
+                android:layout_width="320dp"
+                android:layout_height="match_parent"
+                android:layout_marginHorizontal="8dp" />
 
         </LinearLayout>
     </HorizontalScrollView>

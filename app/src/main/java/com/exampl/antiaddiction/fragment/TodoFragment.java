@@ -18,16 +18,25 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.exampl.antiaddiction.R;
 import com.exampl.antiaddiction.adapter.TodoAdapter;
+import com.exampl.antiaddiction.db.AppDatabase;
 import com.exampl.antiaddiction.model.TodoItem;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 public class TodoFragment extends Fragment {
+    public static final String KEY_BOARD = "board_key";
 
-    // 数据源
-    private List<TodoItem> localTaskData = new ArrayList<>();
+    // 数据源（所有任务）
+    private  List<TodoItem> localTaskData = new ArrayList<>();
+
+    // 当前显示的看板（默认 default）
+    private String currentBoardKey = "default";
+
     // 三个适配器
     private TodoAdapter todoAdapter, processAdapter, doneAdapter;
 
@@ -35,18 +44,49 @@ public class TodoFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_todo, container, false);
 
-        // 1. 初始化三列 UI (此时数据是空的)
+        // 读取从 MainActivity 传来的 board_key
+        Bundle args = getArguments();
+        if (args != null) {
+            String boardKey = args.getString(KEY_BOARD);
+            if (boardKey != null && !boardKey.isEmpty()) {
+                currentBoardKey = boardKey;
+            }
+        }
+
+        // 显示当前看板名称
+        TextView tvCurrentBoard = view.findViewById(R.id.tv_current_board);
+        if (tvCurrentBoard != null) {
+            tvCurrentBoard.setText(getBoardDisplayName(currentBoardKey));
+        }
+
+        // 初始化三列 UI
         setupColumn(view.findViewById(R.id.colTodo), "待处理", 0);
         setupColumn(view.findViewById(R.id.colProcessing), "进行中", 1);
         setupColumn(view.findViewById(R.id.colDone), "已完成", 2);
 
-        // 2. 绑定新增按钮
+        // 绑定新增按钮
         view.findViewById(R.id.btnAddTodo).setOnClickListener(v -> showAddDialog());
+
+        // 首次刷新
+        refreshKanban();
 
         return view;
     }
 
-    // 初始化每一列的 RecyclerView
+    // 根据 key 返回显示名称
+    private String getBoardDisplayName(String key) {
+        switch (key) {
+            case "study":
+                return "学习笔记";
+            case "work":
+                return "工作任务";
+            case "personal":
+                return "个人备忘";
+            default:
+                return "默认看板";
+        }
+    }
+
     private void setupColumn(View columnView, String title, int status) {
         TextView tvTitle = columnView.findViewById(R.id.tvColumnTitle);
         tvTitle.setText(title);
@@ -54,39 +94,33 @@ public class TodoFragment extends Fragment {
         RecyclerView rv = columnView.findViewById(R.id.rvTaskList);
         rv.setLayoutManager(new LinearLayoutManager(getContext()));
 
-        // 每个列拥有一个独立的 Adapter 实例
-        // 点击任务时，调用 moveTask 方法
         TodoAdapter adapter = new TodoAdapter(new ArrayList<>(), item -> moveTask(item));
         rv.setAdapter(adapter);
 
-        // 保存引用，方便后面刷新数据
         if (status == 0) todoAdapter = adapter;
         else if (status == 1) processAdapter = adapter;
         else doneAdapter = adapter;
     }
 
-    // 处理状态流转的核心逻辑
     private void moveTask(TodoItem item) {
-        // 状态流转：0 -> 1 -> 2 -> 0
         item.status = (item.status + 1) % 3;
-
-        // 留下的空方法
         updateStatusOnBackend(item);
-
-        // 重新分发数据刷新 UI
         refreshKanban();
     }
 
-    // 核心：将大列表 localTaskData 分配给三个不同的 Adapter
     private void refreshKanban() {
         List<TodoItem> todo = new ArrayList<>();
         List<TodoItem> processing = new ArrayList<>();
         List<TodoItem> done = new ArrayList<>();
 
+        // 只显示当前看板的任务
         for (TodoItem item : localTaskData) {
+            if (!currentBoardKey.equals(item.boardKey)) {
+                continue;
+            }
             if (item.status == 0) todo.add(item);
             else if (item.status == 1) processing.add(item);
-            else done.add(item);
+            else if (item.status == 2) done.add(item);
         }
 
         if (todoAdapter != null) todoAdapter.updateList(todo);
@@ -116,14 +150,33 @@ public class TodoFragment extends Fragment {
     }
 
     private void addNewTaskLocal(String content, String priority) {
-        TodoItem newItem = new TodoItem(System.currentTimeMillis(), content, 0, priority);
-        localTaskData.add(newItem);
+        // 1. 准备数据
+        String todayDate = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
+        TodoItem newItem = new TodoItem(null, content, 0, priority, currentBoardKey, todayDate);
 
-        syncWithBackend(newItem); // 空方法
-        refreshKanban(); // 刷新
+        // 2. 开启子线程执行“存”和“取”
+        new Thread(() -> {
+            // 【子线程】A. 执行存库
+            AppDatabase.getInstance(requireContext()).todoDao().insert(newItem);
+
+            // 【子线程】B. 存完后，立即读取最新的全部数据
+            // 这样可以确保 localTaskData 是最新的“真理”
+            List<TodoItem> newData = AppDatabase.getInstance(requireContext()).todoDao().getAllTasks();
+
+            // 【主线程】C. 回到主线程更新 UI
+            requireActivity().runOnUiThread(() -> {
+                this.localTaskData = newData; // 更新内存数据
+                refreshKanban(); // 刷新三个看板的适配器
+                Toast.makeText(getContext(), "保存成功", Toast.LENGTH_SHORT).show();
+            });
+
+            // 顺便执行同步（如果以后有网络请求，也建议在子线程做）
+            syncWithBackend(newItem);
+
+        }).start();
     }
 
-    // --- 留给未来的后端占位方法 ---
+
     private void updateStatusOnBackend(TodoItem item) {
         Log.d("ANTI_LOG", "状态更新准备同步: " + item.content + " -> 状态 " + item.status);
     }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 声明一个名为 toolbar_color 的属性，格式是“颜色” -->
+    <attr name="toolbar_color" format="color" />
+</resources>

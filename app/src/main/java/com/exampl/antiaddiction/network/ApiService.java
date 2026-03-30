@@ -1,14 +1,12 @@
-package com.exampl.antiaddiction.api;
+package com.exampl.antiaddiction.network;
 
 import com.exampl.antiaddiction.model.Result;
 import com.exampl.antiaddiction.model.UserInfo;
-import com.google.firebase.firestore.auth.User;
 
 import retrofit2.Call;
 import retrofit2.http.Body;
 import retrofit2.http.GET;
 import retrofit2.http.POST;
-import retrofit2.http.PUT;
 import retrofit2.http.Path;
 
 public interface ApiService {

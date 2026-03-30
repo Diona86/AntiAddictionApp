@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#78C2AD" /> <!-- 这种薄荷绿跟原图更配 -->
+    <corners android:radius="20dp" /> <!-- 胶囊形状 -->
+</shape>

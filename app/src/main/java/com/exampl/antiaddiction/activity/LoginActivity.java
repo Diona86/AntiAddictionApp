@@ -14,9 +14,10 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.exampl.antiaddiction.R;
-import com.exampl.antiaddiction.api.ApiService;
+import com.exampl.antiaddiction.network.ApiService;
 import com.exampl.antiaddiction.model.Result;
 import com.exampl.antiaddiction.model.UserInfo;
+import com.exampl.antiaddiction.utils.ThemeUtils;
 import com.exampl.antiaddiction.utils.Utils;
 import com.google.android.material.textfield.TextInputEditText;
 
@@ -37,6 +38,7 @@ public class LoginActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeUtils.applyTheme(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 
@@ -48,9 +50,10 @@ public class LoginActivity extends AppCompatActivity {
         btnLogin = findViewById(R.id.btnLogin);
         TextView tvRegister = findViewById(R.id.tvRegister);
 
+        String baseUrl=getString(R.string.base_url);
         // 创建 Retrofit
         Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl("http://192.168.1.106:8080/")
+                .baseUrl(baseUrl)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build();
 

@@ -2,4 +2,11 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="toolbar_color">#C9B1E7</color>
+    <color name="profile_bg">#F2FAF6</color> <!-- 薄荷绿底色 -->
+    <color name="logout_red">#E57373</color> <!-- 退出登录的红色 -->
+    <!-- 默认蓝 -->
+    <color name="primary_default">#4A90E2</color>
+    <!-- 松石绿 (你截图选中的那个) -->
+    <color name="primary_pine">#4DB6AC</color>
 </resources>

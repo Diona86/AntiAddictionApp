@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">AntiAddiction</string>
+    <string name="base_url">http://192.168.1.106:8080/</string>
     <string name="title_activity_login2">LoginActivity2</string>
     <string name="prompt_email">Email</string>
     <string name="prompt_password">Password</string>
@@ -9,5 +10,7 @@
     <string name="invalid_username">Not a valid username</string>
     <string name="invalid_password">Password must be >5 characters</string>
     <string name="login_failed">"Login failed"</string>
+    <string name="navigation_drawer_open">打开导航抽屉</string>
+    <string name="navigation_drawer_close">关闭导航抽屉</string>
     <string-array name="priority_array"> <item>高</item> <item>中</item> <item>低</item> </string-array>
 </resources>

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <group android:checkableBehavior="single">
+
+        <item
+            android:id="@+id/nav_today"
+            android:icon="@drawable/ic_today"
+            android:title="今天" />
+
+        <item
+            android:id="@+id/nav_collection"
+            android:icon="@drawable/ic_collection"
+            android:title="收集箱" />
+
+    </group>
+
+    <item android:title="我的清单">
+        <menu>
+            <group android:checkableBehavior="single">
+
+                <item
+                    android:id="@+id/board_default"
+                    android:icon="@drawable/ic_board_default"
+                    android:title="默认看板" />
+
+                <item
+                    android:id="@+id/board_study"
+                    android:icon="@drawable/ic_board_study"
+                    android:title="学习笔记" />
+
+                <item
+                    android:id="@+id/board_work"
+                    android:icon="@drawable/ic_board_work"
+                    android:title="工作任务" />
+
+                <item
+                    android:id="@+id/board_personal"
+                    android:icon="@drawable/ic_board_personal"
+                    android:title="个人备忘" />
+
+            </group>
+        </menu>
+    </item>
+
+    <item
+        android:id="@+id/nav_add_board"
+        android:icon="@drawable/ic_add"
+        android:title="添加新清单" />
+
+</menu>
