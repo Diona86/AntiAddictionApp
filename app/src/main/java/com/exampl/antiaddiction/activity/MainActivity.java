@@ -1,6 +1,8 @@
 package com.exampl.antiaddiction.activity;
 
+import static androidx.core.content.ContentProviderCompat.requireContext;
 import static com.exampl.antiaddiction.utils.Utils.formatTime;
+import static com.google.android.material.internal.ContextUtils.getActivity;
 
 import android.annotation.SuppressLint;
 import android.app.AppOpsManager;
@@ -38,17 +40,26 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.exampl.antiaddiction.R;
 import com.exampl.antiaddiction.adapter.UsageAdapter;
+import com.exampl.antiaddiction.cloudbase.CloudBaseCallback;
+import com.exampl.antiaddiction.cloudbase.CloudBaseClient;
 import com.exampl.antiaddiction.fragment.CalendarFragment;
 import com.exampl.antiaddiction.fragment.ClockFragment;
 import com.exampl.antiaddiction.fragment.ProfileFragment;
 import com.exampl.antiaddiction.fragment.StatFragment;
 import com.exampl.antiaddiction.fragment.TodoFragment;
+import com.exampl.antiaddiction.manager.UserManager;
 import com.exampl.antiaddiction.model.AppUsageInfo;
 import com.exampl.antiaddiction.utils.ThemeUtils;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.navigation.NavigationView;
+import com.google.gson.reflect.TypeToken;
+
 import android.view.MenuItem;
 import android.widget.Toast;
+
+import java.util.List;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -174,5 +185,45 @@ public class MainActivity extends AppCompatActivity {
             }
             return true;
         });
+    }
+    private void checkAndEnforceLimit(long currentLocalMillis) {
+        String userId = UserManager.getInstance(this).getUserId();
+        String path = "/v1/rdb/rest/control_policy?userId=eq." + userId;
+
+        TypeToken<List<Map<String, Object>>> typeToken = new TypeToken<List<Map<String, Object>>>() {};
+        CloudBaseClient cloudbase = new CloudBaseClient(getString(R.string.CLOUDBASE_ENV_ID), getString(R.string.CLOUDBASE_ACCESS_TOKEN));
+
+        cloudbase.request("GET", path, null, null, typeToken, new CloudBaseCallback<List<Map<String, Object>>>() {
+            @Override
+            public void onSuccess(List<Map<String, Object>> data) {
+                if (data != null && !data.isEmpty()) {
+                    // 1. 拿到限额（分钟）
+                    int limitMinutes = ((Double) data.get(0).get("totalLimit")).intValue();
+
+                    // 2. 本地计算当前已玩分钟
+                    long currentMinutes = currentLocalMillis / 1000 / 60;
+
+                    // 3. 核心对比
+                    if (currentMinutes >= limitMinutes) {
+                        showLockScreen(limitMinutes); // ！！！执行拦截！！！
+                    }
+                }
+            }
+            @Override
+            public void onError(int code, String message) {}
+        });
+    }
+
+    private void showLockScreen(int limit) {
+        // 弹出一个全屏、不可取消的 Dialog 或跳转到一个专门的 LockActivity
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("⚠️ 您的时间已用完")
+                .setMessage("监管者设置的每日限额为 " + limit + " 分钟。请放下手机，去看看窗外的风景吧。")
+                .setCancelable(false) // 强制不可取消
+                .setPositiveButton("我知道了", (d, w) -> {
+                    // 这里可以执行更狠的操作，比如返回桌面
+                    this.finish();
+                })
+                .show();
     }
 }

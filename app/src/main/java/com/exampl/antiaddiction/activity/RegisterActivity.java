@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.RadioButton;
 import android.widget.Toast;
@@ -15,11 +16,18 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.exampl.antiaddiction.R;
+import com.exampl.antiaddiction.cloudbase.CloudBaseCallback;
+import com.exampl.antiaddiction.cloudbase.CloudBaseClient;
 import com.exampl.antiaddiction.network.ApiService;
 import com.exampl.antiaddiction.model.Result;
 import com.exampl.antiaddiction.model.UserInfo;
 import com.exampl.antiaddiction.utils.ThemeUtils;
+import com.exampl.antiaddiction.utils.Utils;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.gson.reflect.TypeToken;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -80,7 +88,8 @@ public class RegisterActivity extends AppCompatActivity {
     }
 
     private void registerUser() {
-        // 1. 获取用户输入
+        // 1. 获取数据
+        CloudBaseClient cloudbase=new CloudBaseClient(getString(R.string.CLOUDBASE_ENV_ID),getString(R.string.CLOUDBASE_ACCESS_TOKEN));
         String username = etUsername.getText().toString().trim();  // ✅ 用 getText()
         String password = etPassword.getText().toString().trim();  // ✅ 用 getText()
         String role = radioChild.isChecked() ? "self" : "supervisor";
@@ -106,48 +115,38 @@ public class RegisterActivity extends AppCompatActivity {
         btnRegister.setText("注册中...");
 
         // 4. 创建用户对象
-        UserInfo newUser = new UserInfo(username, password, role);
+        UserInfo newuser = new UserInfo(username, password, role);
 
         // 5. 发送请求
-        apiService.registerUser(newUser).enqueue(new Callback<Result<UserInfo>>() {
-            @Override
-            public void onResponse(Call<Result<UserInfo>> call, Response<Result<UserInfo>> response) {
-                // 恢复按钮
-                btnRegister.setEnabled(true);
-                btnRegister.setText("注册");
+        // 注册
+        Map<String, Object> newUser = new HashMap<>();
+        newUser.put("username", username);
+        newUser.put("password", password); // 实际项目建议先 MD5 或 SHA256 加密再存
+        newUser.put("role",role);
 
-                // 处理响应
-                if (response.isSuccessful() && response.body() != null) {
-                    Result<UserInfo> result = response.body();
+        TypeToken<Map<String, Object>> typeToken = new TypeToken<Map<String, Object>>() {};
 
-                    // 显示消息
-                    Toast.makeText(RegisterActivity.this,
-                            result.getMessage(), Toast.LENGTH_LONG).show();
-
-                    // 判断是否成功
-                    if (result.getCode() == 200) {
-                        // 延迟跳转，让用户看到 Toast
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            jumpToLogin();
-                        }, 1500);
+        cloudbase.<Map<String, Object>>request(
+                "POST",
+                "/v1/rdb/rest/user",
+                newUser,
+                null,
+                typeToken,
+                new CloudBaseCallback<Map<String, Object>>() {
+                    @Override
+                    public void onSuccess(Map<String, Object> data) {
+                        Log.d("CloudBase", "注册成功");
+                        Utils.jumpPage(RegisterActivity.this,LoginActivity.class,"",null);
                     }
-                } else {
-                    Toast.makeText(RegisterActivity.this,
-                            "注册失败：" + response.code(), Toast.LENGTH_SHORT).show();
+
+                    @Override
+                    public void onError(int code, String message) {
+                        Log.e("CloudBase", "注册失败: " + message);
+                    }
                 }
-            }
-
-            @Override
-            public void onFailure(Call<Result<UserInfo>> call, Throwable t) {
-                // 恢复按钮
-                btnRegister.setEnabled(true);
-                btnRegister.setText("注册");
-
-                // 显示错误
-                Toast.makeText(RegisterActivity.this,
-                        "网络错误：" + t.getMessage(), Toast.LENGTH_SHORT).show();
-            }
-        });
+        );
+        btnRegister.setEnabled(true);
+        btnRegister.setText("注册");
     }
 
     private void jumpToLogin() {

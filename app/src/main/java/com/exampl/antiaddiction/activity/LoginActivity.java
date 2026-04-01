@@ -14,18 +14,26 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.exampl.antiaddiction.R;
+import com.exampl.antiaddiction.cloudbase.CloudBaseCallback;
+import com.exampl.antiaddiction.cloudbase.CloudBaseClient;
+import com.exampl.antiaddiction.manager.UserManager;
 import com.exampl.antiaddiction.network.ApiService;
 import com.exampl.antiaddiction.model.Result;
 import com.exampl.antiaddiction.model.UserInfo;
 import com.exampl.antiaddiction.utils.ThemeUtils;
 import com.exampl.antiaddiction.utils.Utils;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.gson.reflect.TypeToken;
+
+import java.util.List;
+import java.util.Map;
 
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
+
 
 public class LoginActivity extends AppCompatActivity {
 
@@ -36,6 +44,7 @@ public class LoginActivity extends AppCompatActivity {
     private Button testLogin;
     private ApiService apiService;
 
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         ThemeUtils.applyTheme(this);
@@ -43,6 +52,7 @@ public class LoginActivity extends AppCompatActivity {
         setContentView(R.layout.activity_login);
 
         // 初始化控件
+
         etUsername = findViewById(R.id.etUsername);
         testLogin =findViewById(R.id.tsLogin);
         etPassword = findViewById(R.id.etPassword);
@@ -69,6 +79,7 @@ public class LoginActivity extends AppCompatActivity {
         btnLogin.setOnClickListener(v -> login());
         testLogin.setOnClickListener(v->{
             Utils.jumpPage(LoginActivity.this,MainActivity.class,"",null);
+            //doTest();
         });
 
         // 设置窗口边距
@@ -79,11 +90,50 @@ public class LoginActivity extends AppCompatActivity {
         });
     }
 
+    private void doTest() {
+        CloudBaseClient cloudbase=new CloudBaseClient(getString(R.string.CLOUDBASE_ENV_ID),getString(R.string.CLOUDBASE_ACCESS_TOKEN));
+        TypeToken<List<Map<String, Object>>> typeToken = new TypeToken<List<Map<String, Object>>>() {};
+        cloudbase.<List<Map<String,Object>>>request(
+                "GET",
+                "/v1/rdb/rest/user?limit=10",
+                null,   // GET 请求无 body
+                null,   // 无额外 headers
+                typeToken,
+                new CloudBaseCallback<List<Map<String, Object>>>() {
+                    @Override
+                    public void onSuccess(List<Map<String, Object>> data) {
+                        if (data == null || data.isEmpty()) {
+                            Log.e("CloudBase", "用户不存在");
+                            return;
+                        }
+
+                        Map<String, Object> user = data.get(0);
+                        String storedPassword = (String) user.get("password");
+
+                        if ("123456".equals(storedPassword)) { // 加密的话这里也要先加密再比对
+                            Log.d("CloudBase", "登录成功，用户id: " + user.get("id"));
+                            // 跳转页面等后续逻辑
+                        } else {
+                            Log.e("CloudBase", "密码错误");
+                        }
+                    }
+
+                    @Override
+                    public void onError(int code, String message) {
+                        Log.e("CloudBase", "请求失败 " + code + ": " + message);
+                        Toast.makeText(LoginActivity.this, "请求失败: " + message, Toast.LENGTH_SHORT).show();
+                        Log.d("Anti_LOG",message);
+                    }
+                }
+        );
+    }
+
     private void login() {
         // 1. 获取用户输入
         String username = etUsername.getText().toString().trim();  // ✅
         String password = etPassword.getText().toString().trim();  // ✅
-        String role = radioChild.isChecked() ? "self" : "supervisor";
+        //String role = radioChild.isChecked() ? "self" : "supervisor";
+        CloudBaseClient cloudbase=new CloudBaseClient(getString(R.string.CLOUDBASE_ENV_ID),getString(R.string.CLOUDBASE_ACCESS_TOKEN));
 
         // 2. 参数校验
         if (username.isEmpty()) {
@@ -101,58 +151,69 @@ public class LoginActivity extends AppCompatActivity {
         btnLogin.setText("登录中...");
 
         // 4. 创建用户对象
-        UserInfo user = new UserInfo(username, password, role);
+        //UserInfo user = new UserInfo(username, password, role);
 
         // 5. 发送登录请求
-        apiService.login(user).enqueue(new Callback<Result<UserInfo>>() {
-            @Override
-            public void onResponse(Call<Result<UserInfo>> call, Response<Result<UserInfo>> response) {
-                // 恢复按钮
-                btnLogin.setEnabled(true);
-                btnLogin.setText("登录");
+        // 不需要编码，直接用原始 JSON
+        String path = "/v1/rdb/rest/user?where={\"username\":\"" + username + "\"}";
 
-                if (response.isSuccessful() && response.body() != null) {
-                    Result<UserInfo> result = response.body();
+        TypeToken<List<Map<String, Object>>> typeToken = new TypeToken<List<Map<String, Object>>>() {};
 
-                    if (result.getCode() == 200) {
-                        // ✅ 登录成功
-                        Log.d("ANTI_LOG", "登录成功: " + result.getMessage());
-                        Toast.makeText(LoginActivity.this,
-                                "登录成功", Toast.LENGTH_SHORT).show();
+        cloudbase.<List<Map<String, Object>>>request(
+                "GET",
+                path,
+                null,
+                null,
+                typeToken,
+                new CloudBaseCallback<List<Map<String, Object>>>() {
+                    @Override
+                    public void onSuccess(List<Map<String, Object>> data) {
+                        if (data == null || data.isEmpty()) {
+                            Toast.makeText(LoginActivity.this, "用户不存在", Toast.LENGTH_SHORT).show();
+                            btnLogin.setEnabled(true);
+                            btnLogin.setText("登录");
+                            return;
+                        }
 
+                        // 在返回数据里找用户名匹配的那条
+                        Map<String, Object> matchedUser = null;
+                        for (Map<String, Object> item : data) {
+                            if (username.equals(item.get("username"))) {
+                                matchedUser = item;
+                                break;
+                            }
+                        }
 
+                        if (matchedUser == null) {
+                            Toast.makeText(LoginActivity.this, "用户不存在", Toast.LENGTH_SHORT).show();
+                            btnLogin.setEnabled(true);
+                            btnLogin.setText("登录");
+                            return;
+                        }
 
-//                        // 可选：传递用户信息
-//                        if (result.getData() != null) {
-//                            intent.putExtra("USER_ID", result.getData().getId());
-//                            intent.putExtra("USERNAME", result.getData().getUsername());
-//                        }
-                        Utils.jumpPage(LoginActivity.this,MainActivity.class,"role",role);
+                        String storedPassword = (String) matchedUser.get("password");
+                        if (password.equals(storedPassword)) {
+                            Log.d("CloudBase", "登录成功，用户id: " + matchedUser.get("id"));
+                            String userId = String.valueOf(matchedUser.get("id"));
+                            String role =String.valueOf(matchedUser.get("role"));
+                            String superId=String.valueOf(matchedUser.get("boundUserId"));
 
-                    } else {
-                        // ❌ 登录失败（用户名或密码错误等）
-                        Toast.makeText(LoginActivity.this,
-                                result.getMessage(), Toast.LENGTH_LONG).show();
-                        Log.d("ANTI_LOG", "登录失败: " + result.getMessage());
+                            // ⭐ 保存登录状态
+                            UserManager.getInstance(LoginActivity.this)
+                                    .saveUser(userId, username, role,superId);
+                            Utils.jumpPage(LoginActivity.this, MainActivity.class, "role", role);
+                        } else {
+                            Toast.makeText(LoginActivity.this, "密码错误", Toast.LENGTH_SHORT).show();
+                            btnLogin.setEnabled(true);
+                            btnLogin.setText("登录");
+                        }
                     }
-                } else {
-                    // HTTP 请求失败
-                    Toast.makeText(LoginActivity.this,
-                            "登录失败：" + response.code(), Toast.LENGTH_SHORT).show();
+
+                    @Override
+                    public void onError(int code, String message) {
+                        Log.e("CloudBase", "登录失败: " + message);
+                    }
                 }
-            }
-
-            @Override
-            public void onFailure(Call<Result<UserInfo>> call, Throwable t) {
-                // 恢复按钮
-                btnLogin.setEnabled(true);
-                btnLogin.setText("登录");
-
-                // ✅ 网络错误，不应该跳转！
-                Toast.makeText(LoginActivity.this,
-                        "网络错误：" + t.getMessage(), Toast.LENGTH_SHORT).show();
-                Log.e("ANTI_LOG", "网络错误", t);
-            }
-        });
+        );
     }
 }
