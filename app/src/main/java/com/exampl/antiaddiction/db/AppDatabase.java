@@ -18,7 +18,7 @@ public abstract class AppDatabase extends RoomDatabase {
             instance = Room.databaseBuilder(context.getApplicationContext(),
                             AppDatabase.class, "anti_addiction_db")
                     .fallbackToDestructiveMigration()
-                    .allowMainThreadQueries() // 注意：为了演示方便先允许主线程查询，实际开发建议用异步
+                    .allowMainThreadQueries() // 注意：为了演示方便先允许主线程查询，实际开发用异步
                     .build();
         }
         return instance;

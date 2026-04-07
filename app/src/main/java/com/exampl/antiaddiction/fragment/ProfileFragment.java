@@ -83,7 +83,14 @@ public class ProfileFragment extends Fragment {
                 showSelfBindingUI();
             }
         });
-        // 设置头像 (适配你有的 ic_default_avatar)
+        // 1. Set username from UserManager
+        TextView tvProfileNickname = view.findViewById(R.id.tvProfileNickname);
+        String username = UserManager.getInstance(requireContext()).getUsername();
+        if (!username.isEmpty()) {
+            tvProfileNickname.setText(username);
+        }
+
+        // 2. Set avatar (adapt to your ic_default_avatar)
         ImageView ivAvatar = view.findViewById(R.id.ivAvatar);
         if (ivAvatar != null) {
             ivAvatar.setImageResource(R.drawable.ic_default_avatar);

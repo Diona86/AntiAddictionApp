@@ -1,5 +1,6 @@
 package com.exampl.antiaddiction.fragment;
 
+import android.content.Context;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -31,60 +32,64 @@ import java.util.Locale;
 public class TodoFragment extends Fragment {
     public static final String KEY_BOARD = "board_key";
 
-    // 数据源（所有任务）
-    private  List<TodoItem> localTaskData = new ArrayList<>();
-
-    // 当前显示的看板（默认 default）
+    private List<TodoItem> localTaskData = new ArrayList<>();
     private String currentBoardKey = "default";
-
-    // 三个适配器
     private TodoAdapter todoAdapter, processAdapter, doneAdapter;
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_todo, container, false);
 
-        // 读取从 MainActivity 传来的 board_key
-        Bundle args = getArguments();
-        if (args != null) {
-            String boardKey = args.getString(KEY_BOARD);
-            if (boardKey != null && !boardKey.isEmpty()) {
-                currentBoardKey = boardKey;
-            }
+        // 1. 获取看板 Key
+        if (getArguments() != null) {
+            String boardKey = getArguments().getString(KEY_BOARD);
+            if (boardKey != null) currentBoardKey = boardKey;
         }
 
-        // 显示当前看板名称
+        // 2. 初始化标题
         TextView tvCurrentBoard = view.findViewById(R.id.tv_current_board);
         if (tvCurrentBoard != null) {
             tvCurrentBoard.setText(getBoardDisplayName(currentBoardKey));
         }
 
-        // 初始化三列 UI
+        // 3. 初始化三列 UI
         setupColumn(view.findViewById(R.id.colTodo), "待处理", 0);
         setupColumn(view.findViewById(R.id.colProcessing), "进行中", 1);
         setupColumn(view.findViewById(R.id.colDone), "已完成", 2);
 
-        // 绑定新增按钮
+        // 4. 绑定按钮
         view.findViewById(R.id.btnAddTodo).setOnClickListener(v -> showAddDialog());
 
-        // 首次刷新
-        refreshKanban();
+        // 5. 加载数据
+        loadDataFromDb();
 
         return view;
     }
 
-    // 根据 key 返回显示名称
-    private String getBoardDisplayName(String key) {
-        switch (key) {
-            case "study":
-                return "学习笔记";
-            case "work":
-                return "工作任务";
-            case "personal":
-                return "个人备忘";
-            default:
-                return "默认看板";
-        }
+    /**
+     * 统一的数据加载方法
+     */
+    private void loadDataFromDb() {
+        // 提前获取 ApplicationContext，防止子线程运行时 Fragment 已销毁
+        Context appContext = requireContext().getApplicationContext();
+        
+        new Thread(() -> {
+            try {
+                String todayDate = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
+                // 从数据库获取当天所有任务
+                List<TodoItem> tasks = AppDatabase.getInstance(appContext).todoDao().getTasksByDate(todayDate);
+                
+                // 回到主线程更新，增加 isAdded() 判断防止崩溃
+                if (isAdded() && getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        this.localTaskData = tasks;
+                        refreshKanban();
+                    });
+                }
+            } catch (Exception e) {
+                Log.e("ANTI_LOG", "加载失败", e);
+            }
+        }).start();
     }
 
     private void setupColumn(View columnView, String title, int status) {
@@ -104,8 +109,23 @@ public class TodoFragment extends Fragment {
 
     private void moveTask(TodoItem item) {
         item.status = (item.status + 1) % 3;
-        updateStatusOnBackend(item);
-        refreshKanban();
+        Context appContext = requireContext().getApplicationContext();
+
+        new Thread(() -> {
+            try {
+                AppDatabase.getInstance(appContext).todoDao().update(item);
+                
+                if (isAdded() && getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        refreshKanban();
+                        Toast.makeText(getContext(), "状态已同步", Toast.LENGTH_SHORT).show();
+                    });
+                }
+                updateStatusOnBackend(item);
+            } catch (Exception e) {
+                Log.e("ANTI_LOG", "更新失败", e);
+            }
+        }).start();
     }
 
     private void refreshKanban() {
@@ -113,14 +133,13 @@ public class TodoFragment extends Fragment {
         List<TodoItem> processing = new ArrayList<>();
         List<TodoItem> done = new ArrayList<>();
 
-        // 只显示当前看板的任务
         for (TodoItem item : localTaskData) {
-            if (!currentBoardKey.equals(item.boardKey)) {
-                continue;
+            // 严格匹配看板 Key
+            if (currentBoardKey.equals(item.boardKey)) {
+                if (item.status == 0) todo.add(item);
+                else if (item.status == 1) processing.add(item);
+                else if (item.status == 2) done.add(item);
             }
-            if (item.status == 0) todo.add(item);
-            else if (item.status == 1) processing.add(item);
-            else if (item.status == 2) done.add(item);
         }
 
         if (todoAdapter != null) todoAdapter.updateList(todo);
@@ -134,12 +153,12 @@ public class TodoFragment extends Fragment {
         Spinner spPriority = v.findViewById(R.id.spPriority);
 
         new MaterialAlertDialogBuilder(requireContext())
-                .setTitle("添加新任务")
+                .setTitle("添加任务到 [" + getBoardDisplayName(currentBoardKey) + "]")
                 .setView(v)
                 .setPositiveButton("添加", (dialog, which) -> {
-                    String content = etContent.getText().toString();
+                    String content = etContent.getText().toString().trim();
                     String priority = spPriority.getSelectedItem().toString();
-                    if (!content.trim().isEmpty()) {
+                    if (!content.isEmpty()) {
                         addNewTaskLocal(content, priority);
                     } else {
                         Toast.makeText(getContext(), "内容不能为空", Toast.LENGTH_SHORT).show();
@@ -150,32 +169,34 @@ public class TodoFragment extends Fragment {
     }
 
     private void addNewTaskLocal(String content, String priority) {
-        // 1. 准备数据
         String todayDate = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
+        // ID 传 null，让 Room 自动生成
         TodoItem newItem = new TodoItem(null, content, 0, priority, currentBoardKey, todayDate);
+        Context appContext = requireContext().getApplicationContext();
 
-        // 2. 开启子线程执行“存”和“取”
         new Thread(() -> {
-            // 【子线程】A. 执行存库
-            AppDatabase.getInstance(requireContext()).todoDao().insert(newItem);
-
-            // 【子线程】B. 存完后，立即读取最新的全部数据
-            // 这样可以确保 localTaskData 是最新的“真理”
-            List<TodoItem> newData = AppDatabase.getInstance(requireContext()).todoDao().getAllTasks();
-
-            // 【主线程】C. 回到主线程更新 UI
-            requireActivity().runOnUiThread(() -> {
-                this.localTaskData = newData; // 更新内存数据
-                refreshKanban(); // 刷新三个看板的适配器
-                Toast.makeText(getContext(), "保存成功", Toast.LENGTH_SHORT).show();
-            });
-
-            // 顺便执行同步（如果以后有网络请求，也建议在子线程做）
-            syncWithBackend(newItem);
-
+            try {
+                // 存入数据库
+                AppDatabase.getInstance(appContext).todoDao().insert(newItem);
+                // 存完后重新拉取最新数据
+                loadDataFromDb();
+                // 同步后端
+                syncWithBackend(newItem);
+            } catch (Exception e) {
+                Log.e("ANTI_LOG", "保存失败", e);
+            }
         }).start();
     }
 
+    private String getBoardDisplayName(String key) {
+        if (key == null) return "默认看板";
+        switch (key) {
+            case "study": return "学习笔记";
+            case "work": return "工作任务";
+            case "personal": return "个人备忘";
+            default: return "默认看板";
+        }
+    }
 
     private void updateStatusOnBackend(TodoItem item) {
         Log.d("ANTI_LOG", "状态更新准备同步: " + item.content + " -> 状态 " + item.status);
