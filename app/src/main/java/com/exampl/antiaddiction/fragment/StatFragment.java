@@ -152,6 +152,7 @@ public class StatFragment extends Fragment {
         selfMap.put("nickname", "我 (本机实时)");
         selfMap.put("totalTime", totalMillis);
         selfMap.put("appJson", new Gson().toJson(list));
+        selfMap.put("appLimits", "{}");
 
         displayData.clear();
         displayData.add(selfMap);
@@ -214,11 +215,34 @@ public class StatFragment extends Fragment {
             mainAdapter = new ChildDashboardAdapter(displayData, "supervisor".equals(role), new ChildDashboardAdapter.OnLimitSetListener() {
                 @Override public void onSetTotalLimit(String userId) { showLimitDialog(userId, null); }
                 @Override public void onSetAppLimit(String userId, String pkg) { showLimitDialog(userId, pkg); }
+                @Override public void onViewAppUsage(AppUsageInfo app, Double limitMinutes) { showAppUsageDialog(app, limitMinutes); }
             });
             mainRecyclerView.setAdapter(mainAdapter);
         } else {
             mainAdapter.notifyDataSetChanged();
         }
+    }
+
+    private void showAppUsageDialog(AppUsageInfo app, Double limitMinutes) {
+        long usedMinutes = app.usageTime / 1000 / 60;
+        StringBuilder message = new StringBuilder();
+        message.append("已使用: ").append(app.timeFormatted).append(" (").append(usedMinutes).append(" 分钟)");
+        if (limitMinutes == null) {
+            message.append("\n限制: 无限制");
+        } else {
+            int limit = limitMinutes.intValue();
+            long remain = Math.max(0, limit - usedMinutes);
+            int percent = limit > 0 ? (int) Math.min(100, (usedMinutes * 100 / limit)) : 100;
+            message.append("\n限制: ").append(limit).append(" 分钟");
+            message.append("\n进度: ").append(percent).append("%");
+            message.append("\n剩余: ").append(remain).append(" 分钟");
+        }
+
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle(app.appName)
+                .setMessage(message.toString())
+                .setPositiveButton("知道了", null)
+                .show();
     }
 
     private void showLimitDialog(String userId, String pkg) {
@@ -242,60 +266,39 @@ public class StatFragment extends Fragment {
     }
 
     private void updatePolicy(String userId, String pkg, int minutes) {
-        // 1. 彻底解决 6.0 问题：确保 ID 是纯数字字符串
-        String cleanUserId = userId;
-        if (userId.contains(".")) {
-            cleanUserId = userId.split("\\.")[0];
-        }
-        final String finalUserId = cleanUserId; // 匿名内部类需要 final
+        String cleanUserId = userId.contains(".") ? userId.split("\\.")[0] : userId;
 
-        Log.d("ANTI_LOG", "准备管控: cleanUserId=" + finalUserId + ", pkg=" + pkg);
-
-        //CloudBaseClient cloudbase = new CloudBaseClient(getString(R.string.CLOUDBASE_ENV_ID), getString(R.string.CLOUDBASE_ACCESS_TOKEN));
-        TypeToken<List<Map<String, Object>>> typeToken = new TypeToken<List<Map<String, Object>>>() {};
-
-        // 第一步：先 GET 查询该用户是否已有策略
-        String queryPath = "/v1/rdb/rest/control_policy?userId=eq." + finalUserId;
-
-        cloudbase.request("GET", queryPath, null, null, typeToken, new CloudBaseCallback<List<Map<String, Object>>>() {
+        // 第一步：先查现有的策略，防止覆盖掉其他 App 的限额
+        String path = "/v1/rdb/rest/control_policy?userId=eq." + cleanUserId;
+        cloudbase.request("GET", path, null, null, new TypeToken<List<Map<String, Object>>>() {}, new CloudBaseCallback<List<Map<String, Object>>>() {
             @Override
             public void onSuccess(List<Map<String, Object>> data) {
-                // 准备 Body 数据
                 Map<String, Object> body = new HashMap<>();
-                body.put("userId", finalUserId);
+                body.put("userId", cleanUserId);
+
                 if (pkg == null) {
                     body.put("totalLimit", minutes);
                 } else {
-                    Map<String, Integer> appLimitMap = new HashMap<>();
-                    appLimitMap.put(pkg, minutes);
-                    body.put("appLimits", new Gson().toJson(appLimitMap));
+                    // 解析旧的 appLimits
+                    Map<String, Integer> currentLimits = new HashMap<>();
+                    if (data != null && !data.isEmpty() && data.get(0).get("appLimits") != null) {
+                        String oldJson = data.get(0).get("appLimits").toString();
+                        currentLimits = new Gson().fromJson(oldJson, new TypeToken<Map<String, Integer>>(){}.getType());
+                    }
+                    currentLimits.put(pkg, minutes); // 加入/更新本次设置
+                    body.put("appLimits", new Gson().toJson(currentLimits));
                 }
 
-                if (data != null && !data.isEmpty()) {
-                    // 情况 A：记录已存在 -> 执行 PATCH
-                    Log.d("ANTI_LOG", "记录已存在，执行更新");
-                    cloudbase.request("PATCH", "/v1/rdb/rest/control_policy?userId=eq." + finalUserId, body, null, null, new CloudBaseCallback<Object>() {
-                        @Override public void onSuccess(Object res) {
-                            if(isAdded()) Toast.makeText(getContext(), "限额已更新", Toast.LENGTH_SHORT).show();
-                        }
-                        @Override public void onError(int c, String m) { Log.e("ANTI_LOG", "PATCH失败: " + m); }
-                    });
-                } else {
-                    // 情况 B：记录不存在 -> 执行 POST
-                    Log.d("ANTI_LOG", "记录不存在，执行新增");
-                    cloudbase.request("POST", "/v1/rdb/rest/control_policy", body, null, null, new CloudBaseCallback<Object>() {
-                        @Override public void onSuccess(Object res) {
-                            if(isAdded()) Toast.makeText(getContext(), "限额已创建", Toast.LENGTH_SHORT).show();
-                        }
-                        @Override public void onError(int c, String m) { Log.e("ANTI_LOG", "POST失败: " + m); }
-                    });
-                }
-            }
+                // 第二步：执行 PATCH 或 POST
+                String method = (data != null && !data.isEmpty()) ? "PATCH" : "POST";
+                String finalPath = method.equals("PATCH") ? path : "/v1/rdb/rest/control_policy";
 
-            @Override
-            public void onError(int code, String message) {
-                Log.e("ANTI_LOG", "查询失败: " + message);
+                cloudbase.request(method, finalPath, body, null, null, new CloudBaseCallback<Object>() {
+                    @Override public void onSuccess(Object o) { Toast.makeText(getContext(), "管控已下发", Toast.LENGTH_SHORT).show(); }
+                    @Override public void onError(int c, String m) { Log.e("ANTI_LOG", "更新失败: " + m); }
+                });
             }
+            @Override public void onError(int c, String m) {}
         });
     }
 
@@ -361,6 +364,15 @@ public class StatFragment extends Fragment {
                 Map<String, Object> policy = data.get(0);
                 Log.d("policy",policy.toString());
 
+                if (!displayData.isEmpty()) {
+                    Map<String, Object> selfItem = displayData.get(0);
+                    selfItem.put("totalLimit", policy.get("totalLimit"));
+                    selfItem.put("appLimits", policy.get("appLimits") == null ? "{}" : String.valueOf(policy.get("appLimits")));
+                    if (mainAdapter != null) {
+                        mainAdapter.notifyDataSetChanged();
+                    }
+                }
+
                 // --- 校验 1: 每日总时长拦截 ---
                 if (policy.get("totalLimit") != null) {
                     // CloudBase 返回的数字默认是 Double 类型，需转为 int
@@ -391,6 +403,7 @@ public class StatFragment extends Fragment {
             }
         });
     }
+
     private void showLockScreen(int limitMinutes) {
         // 检查 Fragment 是否还依附在 Activity 上，防止异步回调导致的崩溃
         if (!isAdded() || getContext() == null) return;

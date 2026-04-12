@@ -20,6 +20,7 @@ import com.exampl.antiaddiction.manager.UserManager;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -32,6 +33,7 @@ public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAd
     public interface OnLimitSetListener {
         void onSetTotalLimit(String userId);
         void onSetAppLimit(String userId, String pkg);
+        void onViewAppUsage(AppUsageInfo app, Double limitMinutes);
     }
 
     public ChildDashboardAdapter(List<Map<String, Object>> dataList, boolean isSupervisor, OnLimitSetListener listener) {
@@ -72,6 +74,22 @@ public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAd
         // 加载 App 列表
         String appJson = (String) item.get("appJson");
         List<AppUsageInfo> apps = new Gson().fromJson(appJson, new TypeToken<List<AppUsageInfo>>(){}.getType());
+        if (apps == null) {
+            apps = java.util.Collections.emptyList();
+        }
+
+        Map<String, Double> appLimitsMap = null;
+        Object appLimitsObj = item.get("appLimits");
+        if (appLimitsObj != null) {
+            try {
+                appLimitsMap = new Gson().fromJson(String.valueOf(appLimitsObj), new TypeToken<Map<String, Double>>(){}.getType());
+            } catch (Exception ignore) {
+                appLimitsMap = new HashMap<>();
+            }
+        }
+        if (appLimitsMap == null) {
+            appLimitsMap = new HashMap<>();
+        }
 
         // 恢复图标 (由于从云端拿的JSON没图标，需要本地PackageManager恢复)
         PackageManager pm = holder.itemView.getContext().getPackageManager();
@@ -80,13 +98,22 @@ public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAd
             catch (Exception e) { app.appIcon = ContextCompat.getDrawable(holder.itemView.getContext(), R.mipmap.ic_launcher); }
         }
 
-        // 绑定内部 App 列表
-        UsageAdapter innerAdapter = new UsageAdapter(apps);
-        // 如果是监管者，设置点击 App 弹窗
-        if (isSupervisor) {
-            // 这里假设你的 UsageAdapter 已经加了点击回调，如果没有请在 UsageAdapter 里加
-            // innerAdapter.setOnItemClickListener(app -> listener.onSetAppLimit(userId, app.packageName));
-        }
+        // 绑定内部 App 列表，并把应用卡片点击回传给 Fragment 处理
+        Map<String, Double> finalAppLimitsMap = appLimitsMap;
+        UsageAdapter innerAdapter = new UsageAdapter(
+                apps,
+                appLimitsMap,
+                app -> {
+                    if (listener == null || app == null) {
+                        return;
+                    }
+                    if (isSupervisor) {
+                        listener.onSetAppLimit(userId, app.packageName);
+                    } else {
+                        listener.onViewAppUsage(app, finalAppLimitsMap.get(app.packageName));
+                    }
+                }
+        );
         holder.rvApps.setLayoutManager(new LinearLayoutManager(holder.itemView.getContext()));
         holder.rvApps.setAdapter(innerAdapter);
 
