@@ -3,8 +3,13 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="QueryAllPackagesPermission">
 
-    <uses-permission android:name="android.intent.permission.INTERNET" />
-    <uses-permission android:name="android.intent.permission.ACCESS_NETWORK_STATE" />
+    <!-- 这里是修改后的标准写法 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermission,ProtectedPermissions" />
@@ -21,6 +26,8 @@
         android:theme="@style/Theme.AntiAddiction"
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
+
+        <!-- Activity 配置保持不变 -->
         <activity
             android:name=".activity.RegisterActivity"
             android:exported="false" />
@@ -29,7 +36,6 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
@@ -40,6 +46,12 @@
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".service.UsageMonitorService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

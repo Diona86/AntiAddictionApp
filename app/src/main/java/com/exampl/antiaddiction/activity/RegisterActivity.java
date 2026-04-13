@@ -1,9 +1,9 @@
 package com.exampl.antiaddiction.activity;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
+import android.provider.Settings;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.RadioButton;
@@ -18,24 +18,14 @@ import androidx.core.view.WindowInsetsCompat;
 import com.exampl.antiaddiction.R;
 import com.exampl.antiaddiction.cloudbase.CloudBaseCallback;
 import com.exampl.antiaddiction.cloudbase.CloudBaseClient;
-import com.exampl.antiaddiction.network.ApiService;
-import com.exampl.antiaddiction.model.Result;
-import com.exampl.antiaddiction.model.UserInfo;
 import com.exampl.antiaddiction.utils.ThemeUtils;
 import com.exampl.antiaddiction.utils.Utils;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.gson.reflect.TypeToken;
 
 import java.util.HashMap;
 import java.util.Map;
-
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
-import retrofit2.Retrofit;
-import retrofit2.converter.gson.GsonConverterFactory;
 
 public class RegisterActivity extends AppCompatActivity {
 
@@ -43,7 +33,6 @@ public class RegisterActivity extends AppCompatActivity {
     private TextInputEditText etUsername;
     private TextInputEditText etPassword;
     private RadioButton radioChild;
-    private ApiService apiService;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,26 +51,6 @@ public class RegisterActivity extends AppCompatActivity {
         etUsername = findViewById(R.id.etUsername);
         etPassword = findViewById(R.id.etPassword);
         radioChild = findViewById(R.id.radioChild);
-        OkHttpClient client = new OkHttpClient.Builder()
-                .addInterceptor(chain -> {
-                    Request original = chain.request();
-                    Request request = original.newBuilder()
-                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                            .header("Accept", "application/json")
-                            .header("Content-Type", "application/json")  // 确保
-                            .method(original.method(), original.body())
-                            .build();
-                    return chain.proceed(request);
-                })
-                .build();
-        // 创建 Retrofit（只创建一次）
-        Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl("http://192.168.1.106:8080/")
-                .client(client)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build();
-
-        apiService = retrofit.create(ApiService.class);
 
         // 设置点击监听
         btnRegister.setOnClickListener(v -> registerUser());
@@ -109,15 +78,15 @@ public class RegisterActivity extends AppCompatActivity {
             Toast.makeText(this, "密码不能少于6位", Toast.LENGTH_SHORT).show();
             return;
         }
+        if (!Utils.isNetworkAvailable(this)) {
+            Toast.makeText(this, "网络状态检测异常，正在继续尝试注册...", Toast.LENGTH_SHORT).show();
+        }
 
         // 3. 禁用按钮，防止重复点击
         btnRegister.setEnabled(false);
         btnRegister.setText("注册中...");
 
-        // 4. 创建用户对象
-        UserInfo newuser = new UserInfo(username, password, role);
-
-        // 5. 发送请求
+        // 4. 发送请求
         // 注册
         Map<String, Object> newUser = new HashMap<>();
         newUser.put("username", username);
@@ -142,16 +111,39 @@ public class RegisterActivity extends AppCompatActivity {
                     @Override
                     public void onError(int code, String message) {
                         Log.e("CloudBase", "注册失败: " + message);
+                        String friendly = Utils.getFriendlyNetworkError(message);
+                        Toast.makeText(RegisterActivity.this, friendly, Toast.LENGTH_SHORT).show();
+                        maybeShowNetworkSettingsDialog(message);
+                        btnRegister.setEnabled(true);
+                        btnRegister.setText("注册");
                     }
                 }
         );
-        btnRegister.setEnabled(true);
-        btnRegister.setText("注册");
     }
 
     private void jumpToLogin() {
         Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
         startActivity(intent);
         finish();
+    }
+
+    private void maybeShowNetworkSettingsDialog(String message) {
+        if (message == null) return;
+        String lower = message.toLowerCase();
+        boolean blockedBySystem = lower.contains("missing internet permission")
+                || lower.contains("eperm")
+                || lower.contains("operation not permitted");
+        if (!blockedBySystem) return;
+
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("需要开启网络访问")
+                .setMessage("系统可能限制了本应用联网。请在应用设置中开启 WLAN/移动数据访问后重试。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("去设置", (d, w) -> {
+                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    intent.setData(Uri.fromParts("package", getPackageName(), null));
+                    startActivity(intent);
+                })
+                .show();
     }
 }

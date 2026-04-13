@@ -50,16 +50,19 @@ import java.util.Map;
 public class StatFragment extends Fragment {
 
     private RecyclerView mainRecyclerView;
+    private View loadingContainer;
     private List<Map<String, Object>> displayData = new ArrayList<>();
     private ChildDashboardAdapter mainAdapter;
     private String role;
     private CloudBaseClient cloudbase;
+    private int pendingChildReports = 0;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_stat, container, false);
         mainRecyclerView = view.findViewById(R.id.mainRecyclerView);
+        loadingContainer = view.findViewById(R.id.statLoadingContainer);
         mainRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
 
         role = UserManager.getInstance(requireContext()).getRole();
@@ -75,6 +78,10 @@ public class StatFragment extends Fragment {
     }
 
     private void loadData() {
+        setLoading(true);
+        if (role == null || role.trim().isEmpty()) {
+            role = "self";
+        }
         if ("self".equals(role)) {
             runSelfLogic();
         } else {
@@ -100,6 +107,8 @@ public class StatFragment extends Fragment {
         List<UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
         if (stats == null || stats.isEmpty()) {
             Log.e("ANTI_LOG", "系统未返回统计数据，请确认是否开启‘使用情况访问权限’");
+            Toast.makeText(getContext(), "暂无统计数据，请先开启使用情况访问权限", Toast.LENGTH_SHORT).show();
+            setLoading(false);
             return;
         }
 
@@ -159,6 +168,7 @@ public class StatFragment extends Fragment {
 
         // 7. 更新 UI 界面
         updateUI();
+        setLoading(false);
 
         // 8. 检查限额（如果超了就弹锁定窗）
         checkAndEnforceLimit(totalMillis);
@@ -174,16 +184,22 @@ public class StatFragment extends Fragment {
                     public void onSuccess(List<Map<String, Object>> children) {
                         if (children == null || children.isEmpty()) {
                             Toast.makeText(getContext(), "暂无绑定的自律者", Toast.LENGTH_SHORT).show();
+                            setLoading(false);
                             return;
                         }
                         displayData.clear();
+                        pendingChildReports = children.size();
 
                         // 2. 为每个孩子抓取今日报告
                         for (Map<String, Object> child : children) {
                             fetchReportForChild(child);
                         }
                     }
-                    @Override public void onError(int code, String message) {}
+                    @Override
+                    public void onError(int code, String message) {
+                        setLoading(false);
+                        Toast.makeText(getContext(), "加载失败，请稍后重试", Toast.LENGTH_SHORT).show();
+                    }
                 });
     }
 
@@ -205,9 +221,26 @@ public class StatFragment extends Fragment {
                         }
                         displayData.add(displayItem);
                         updateUI();
+                        onChildReportFinished();
                     }
-                    @Override public void onError(int code, String message) {}
+                    @Override
+                    public void onError(int code, String message) {
+                        onChildReportFinished();
+                    }
                 });
+    }
+
+    private void onChildReportFinished() {
+        pendingChildReports = Math.max(0, pendingChildReports - 1);
+        if (pendingChildReports == 0) {
+            setLoading(false);
+        }
+    }
+
+    private void setLoading(boolean loading) {
+        if (loadingContainer != null) {
+            loadingContainer.setVisibility(loading ? View.VISIBLE : View.GONE);
+        }
     }
 
     private void updateUI() {

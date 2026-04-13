@@ -132,8 +132,12 @@ public class CloudBaseClient {
                     int code = response.code();
                     mainHandler.post(() -> callback.onError(code, errStr));
                 }
-            } catch (IOException e) {
-                mainHandler.post(() -> callback.onError(-1, e.getMessage()));
+            } catch (IOException | SecurityException e) {
+                String err = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                mainHandler.post(() -> callback.onError(-1, err));
+            } catch (Exception e) {
+                String err = e.getMessage() != null ? e.getMessage() : e.toString();
+                mainHandler.post(() -> callback.onError(-1, err));
             }
         });
     }

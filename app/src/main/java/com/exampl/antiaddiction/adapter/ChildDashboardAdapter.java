@@ -63,16 +63,27 @@ public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAd
         Log.d("ANTI_LOG",name);
         holder.tvName.setText(name);
 
-        long totalMillis = ((Number) item.get("totalTime")).longValue();
+        long totalMillis = 0L;
+        Object totalObj = item.get("totalTime");
+        if (totalObj instanceof Number) {
+            totalMillis = ((Number) totalObj).longValue();
+        }
         holder.tvTotal.setText(formatTime(totalMillis));
 
         // 进度条逻辑 (假设总限额存在)
-        int totalLimit = item.get("totalLimit") != null ? ((Number) item.get("totalLimit")).intValue() : 480;
+        int totalLimit = 480;
+        Object totalLimitObj = item.get("totalLimit");
+        if (totalLimitObj instanceof Number) {
+            totalLimit = ((Number) totalLimitObj).intValue();
+        }
+        if (totalLimit <= 0) {
+            totalLimit = 1;
+        }
         int progress = (int) ((totalMillis / 1000.0 / 60.0 / totalLimit) * 100);
         holder.pb.setProgress(Math.min(progress, 100));
 
         // 加载 App 列表
-        String appJson = (String) item.get("appJson");
+        String appJson = item.get("appJson") == null ? "[]" : String.valueOf(item.get("appJson"));
         List<AppUsageInfo> apps = new Gson().fromJson(appJson, new TypeToken<List<AppUsageInfo>>(){}.getType());
         if (apps == null) {
             apps = java.util.Collections.emptyList();
@@ -118,7 +129,11 @@ public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAd
         holder.rvApps.setAdapter(innerAdapter);
 
         holder.btnLimit.setVisibility(isSupervisor ? View.VISIBLE : View.GONE);
-        holder.btnLimit.setOnClickListener(v -> listener.onSetTotalLimit(userId));
+        holder.btnLimit.setOnClickListener(v -> {
+            if (listener != null) {
+                listener.onSetTotalLimit(userId);
+            }
+        });
     }
 
     private String formatTime(long millis) {

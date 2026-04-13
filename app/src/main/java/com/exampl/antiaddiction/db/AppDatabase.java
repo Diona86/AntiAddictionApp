@@ -6,7 +6,7 @@ import androidx.room.Room;
 import androidx.room.RoomDatabase;
 import com.exampl.antiaddiction.model.TodoItem;
 
-@Database(entities = {TodoItem.class}, version = 1)
+@Database(entities = {TodoItem.class}, version = 1, exportSchema = false)
 public abstract class AppDatabase extends RoomDatabase {
 
     public abstract TodoDao todoDao();

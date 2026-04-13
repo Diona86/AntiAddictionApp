@@ -27,7 +27,7 @@
                 android:layout_width="match_parent"
                 android:paddingTop="20dp"
                 android:layout_height="wrap_content"
-                android:background="@color/toolbar_color"
+                android:background="?attr/colorPrimary"
                 android:fitsSystemWindows="false">
 
                 <androidx.appcompat.widget.Toolbar
@@ -35,7 +35,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="?attr/actionBarSize"
 
-                    android:background="@color/toolbar_color"
+                    android:background="?attr/colorPrimary"
                     app:titleTextColor="?attr/colorOnPrimary"/>
             </com.google.android.material.appbar.AppBarLayout>
 
@@ -52,7 +52,10 @@
             android:id="@+id/bottomNav"
             android:layout_width="match_parent"
             android:layout_height="85dp"
+            android:background="?attr/colorPrimaryContainer"
             app:menu="@menu/bottom_nav_menu"
+            app:itemIconTint="@color/bottom_nav_item_colors"
+            app:itemTextColor="@color/bottom_nav_item_colors"
             app:labelVisibilityMode="labeled"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"

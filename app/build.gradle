@@ -36,7 +36,6 @@ android {
 dependencies {
     implementation libs.retrofit
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
-    implementation libs.androidx.ink.geometry.android
 
     //room
     def room_version="2.6.1"
@@ -48,15 +47,6 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.google.code.gson:gson:2.10.1'
 
-    // 1. 使用一个非常稳定的 Firebase BoM 版本 (32.1.0)
-    // 这个版本使用的 Firestore 不会因为缺少 DataStore 而崩溃
-    implementation platform('com.google.firebase:firebase-bom:32.1.0')
-    implementation 'com.google.firebase:firebase-auth'
-    implementation 'com.google.firebase:firebase-firestore'
-
-    implementation "androidx.datastore:datastore-preferences:1.0.0"
-    implementation "androidx.datastore:datastore:1.0.0"
-
     // 2. 基础安卓库 (保持你原来的)
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.9.0'
@@ -66,8 +56,6 @@ dependencies {
     // 3. 这里的 lifecycle 库建议也写死版本，防止 libs 定义冲突
     implementation libs.lifecycle.runtime.ktx.v261
     implementation libs.androidx.annotation
-    implementation libs.androidx.lifecycle.livedata.ktx
-    implementation libs.androidx.lifecycle.viewmodel.ktx
 
     // 测试相关 (保持原样)
     testImplementation 'junit:junit:4.13.2'

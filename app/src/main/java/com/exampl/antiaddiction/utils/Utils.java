@@ -1,12 +1,15 @@
 package com.exampl.antiaddiction.utils;
 
-import static androidx.core.content.ContextCompat.startActivity;
-
 import android.app.Activity;
+import android.content.pm.PackageManager;
+import android.content.Context;
 import android.content.Intent;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.util.Log;
 
-import com.exampl.antiaddiction.activity.LoginActivity;
-import com.exampl.antiaddiction.activity.MainActivity;
+import androidx.core.content.ContextCompat;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -68,5 +71,49 @@ public class Utils {
             }
         }
         return 0;
+    }
+
+    public static boolean isNetworkAvailable(Context context) {
+        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_NETWORK_STATE)
+                != PackageManager.PERMISSION_GRANTED) {
+            return false;
+        }
+        try {
+            ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return false;
+            Network network = cm.getActiveNetwork();
+            if (network == null) return false;
+            NetworkCapabilities capabilities = cm.getNetworkCapabilities(network);
+            if (capabilities == null) return false;
+            // Do not require VALIDATED here; some ROM/captive networks may skip it
+            // while real requests still work.
+            return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        } catch (SecurityException se) {
+            Log.w("ANTI_LOG", "ACCESS_NETWORK_STATE missing in installed app", se);
+            return false;
+        }
+    }
+
+    public static String getFriendlyNetworkError(String rawMessage) {
+        if (rawMessage == null || rawMessage.trim().isEmpty()) {
+            return "网络请求失败，请稍后重试";
+        }
+        String msg = rawMessage.toLowerCase(Locale.ROOT);
+        if (msg.contains("connection refused")) {
+            return "服务器拒绝连接，请稍后重试";
+        }
+        if (msg.contains("missing internet permission")) {
+            return "系统拒绝网络访问，请检查系统网络限制并重装应用";
+        }
+        if (msg.contains("eai_nodata") || msg.contains("unable to resolve host")) {
+            return "网络不可用或域名解析失败，请检查网络连接";
+        }
+        if (msg.contains("eperm") || msg.contains("operation not permitted")) {
+            return "当前网络被系统限制，请检查系统网络权限或安全策略";
+        }
+        if (msg.contains("timeout")) {
+            return "请求超时，请稍后重试";
+        }
+        return "网络请求失败，请稍后重试";
     }
 }

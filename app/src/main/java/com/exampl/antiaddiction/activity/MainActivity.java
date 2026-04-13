@@ -6,7 +6,9 @@ import static com.google.android.material.internal.ContextUtils.getActivity;
 
 import android.annotation.SuppressLint;
 import android.app.AppOpsManager;
+import android.os.Build;
 
+import androidx.core.app.ActivityCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.GravityCompat;
 import androidx.core.view.ViewCompat;
@@ -49,6 +51,7 @@ import com.exampl.antiaddiction.fragment.StatFragment;
 import com.exampl.antiaddiction.fragment.TodoFragment;
 import com.exampl.antiaddiction.manager.UserManager;
 import com.exampl.antiaddiction.model.AppUsageInfo;
+import com.exampl.antiaddiction.service.UsageMonitorService;
 import com.exampl.antiaddiction.utils.ThemeUtils;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -63,6 +66,7 @@ import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final int REQ_POST_NOTI = 10086;
     private DrawerLayout drawerLayout;
     private NavigationView navView;
     private Toolbar toolbar;
@@ -94,6 +98,8 @@ public class MainActivity extends AppCompatActivity {
         } else {
             Log.d("ANTI_LOG", "已授权应用使用查看权限");
         }
+        ensureNotificationPermissionIfNeeded();
+        startOrStopUsageMonitorService();
 
         //绑定控件
         drawerLayout = findViewById(R.id.drawer_layout);
@@ -154,6 +160,25 @@ public class MainActivity extends AppCompatActivity {
 
         // BottomNavigation 切换 Fragment + 动态 Toolbar 标题
         setupNavigation(bottomNav,navView);
+    }
+
+    private void startOrStopUsageMonitorService() {
+        String role = UserManager.getInstance(this).getRole();
+        Intent serviceIntent = new Intent(this, UsageMonitorService.class);
+        if ("self".equals(role) && hasUsageStatsPermission()) {
+            ContextCompat.startForegroundService(this, serviceIntent);
+        } else {
+            stopService(serviceIntent);
+        }
+    }
+
+    private void ensureNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, REQ_POST_NOTI);
+            }
+        }
     }
 
     private void switchBoard(String boardKey) {

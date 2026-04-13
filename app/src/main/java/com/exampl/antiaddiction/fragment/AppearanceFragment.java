@@ -1,6 +1,7 @@
 package com.exampl.antiaddiction.fragment;
 
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -18,6 +19,7 @@ import com.exampl.antiaddiction.R;
 import com.exampl.antiaddiction.activity.MainActivity;
 import com.exampl.antiaddiction.model.ThemeModel;
 import com.exampl.antiaddiction.utils.ThemeUtils;
+import com.google.android.material.color.MaterialColors;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
@@ -32,7 +34,7 @@ public class AppearanceFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_appearance, container, false);
 
         RecyclerView rv = view.findViewById(R.id.rvColorGrid);
-        rv.setLayoutManager(new GridLayoutManager(getContext(), 4));
+        rv.setLayoutManager(new GridLayoutManager(getContext(), 2));
 
         List<ThemeModel> themes = new ArrayList<>();
         // 注意：这里的颜色要和你在 themes.xml 定义的保持一致
@@ -66,6 +68,13 @@ public class AppearanceFragment extends Fragment {
             ThemeModel m = list.get(position);
             holder.tv.setText(m.name);
             holder.colorView.setBackgroundColor(m.colorRes);
+
+            String currentTheme = ThemeUtils.getTheme(requireContext());
+            boolean selected = m.key.equals(currentTheme);
+            int selectedStroke = MaterialColors.getColor(holder.itemView, com.google.android.material.R.attr.colorPrimary);
+            int normalStroke = MaterialColors.getColor(holder.itemView, com.google.android.material.R.attr.colorOutline);
+            holder.card.setStrokeWidth(selected ? 5 : 1);
+            holder.card.setStrokeColor(ColorStateList.valueOf(selected ? selectedStroke : normalStroke));
 
             holder.itemView.setOnClickListener(v -> {
                 // 1. 保存主题 Key
