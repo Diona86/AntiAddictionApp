@@ -41,6 +41,14 @@ public class LoginActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         ThemeUtils.applyTheme(this);
         super.onCreate(savedInstanceState);
+
+        // 已有有效登录态时，直接进入主页，避免每次冷启动都要求重新登录
+        if (UserManager.getInstance(this).isLogin()) {
+            startActivity(new Intent(this, MainActivity.class));
+            finish();
+            return;
+        }
+
         setContentView(R.layout.activity_login);
 
         // 初始化控件

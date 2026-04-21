@@ -25,16 +25,20 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
 public class TodoFragment extends Fragment {
     public static final String KEY_BOARD = "board_key";
+    private static final String DATE_PATTERN = "yyyy-MM-dd";
 
     private List<TodoItem> localTaskData = new ArrayList<>();
     private String currentBoardKey = "default";
     private TodoAdapter todoAdapter, processAdapter, doneAdapter;
+    private TextView todoTitleView, processingTitleView, doneTitleView;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -66,23 +70,37 @@ public class TodoFragment extends Fragment {
         return view;
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        loadDataFromDb();
+    }
+
     /**
      * 统一的数据加载方法
      */
     private void loadDataFromDb() {
+        Context context = getContext();
+        if (context == null) {
+            return;
+        }
         // 提前获取 ApplicationContext，防止子线程运行时 Fragment 已销毁
-        Context appContext = requireContext().getApplicationContext();
-        
+        Context appContext = context.getApplicationContext();
+        final String boardKeySnapshot = currentBoardKey;
+        final String todayDate = getTodayDate();
+
         new Thread(() -> {
             try {
-                String todayDate = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
-                // 从数据库获取当天所有任务
-                List<TodoItem> tasks = AppDatabase.getInstance(appContext).todoDao().getTasksByDate(todayDate);
-                
+                // 直接按看板 + 日期查询，避免把其他看板数据拉到内存再过滤
+                List<TodoItem> tasks = AppDatabase.getInstance(appContext).todoDao().getTasksByBoardAndDate(boardKeySnapshot, todayDate);
+                if (tasks == null) {
+                    tasks = new ArrayList<>();
+                }
                 // 回到主线程更新，增加 isAdded() 判断防止崩溃
                 if (isAdded() && getActivity() != null) {
+                    List<TodoItem> finalTasks = tasks;
                     getActivity().runOnUiThread(() -> {
-                        this.localTaskData = tasks;
+                        this.localTaskData = finalTasks;
                         refreshKanban();
                     });
                 }
@@ -95,6 +113,7 @@ public class TodoFragment extends Fragment {
     private void setupColumn(View columnView, String title, int status) {
         TextView tvTitle = columnView.findViewById(R.id.tvColumnTitle);
         tvTitle.setText(title);
+        TextView tvEmpty = columnView.findViewById(R.id.tvColumnEmpty);
 
         RecyclerView rv = columnView.findViewById(R.id.rvTaskList);
         rv.setLayoutManager(new LinearLayoutManager(getContext()));
@@ -102,22 +121,37 @@ public class TodoFragment extends Fragment {
         TodoAdapter adapter = new TodoAdapter(new ArrayList<>(), item -> moveTask(item));
         rv.setAdapter(adapter);
 
-        if (status == 0) todoAdapter = adapter;
-        else if (status == 1) processAdapter = adapter;
-        else doneAdapter = adapter;
+        if (status == 0) {
+            todoAdapter = adapter;
+            todoTitleView = tvTitle;
+        } else if (status == 1) {
+            processAdapter = adapter;
+            processingTitleView = tvTitle;
+        } else {
+            doneAdapter = adapter;
+            doneTitleView = tvTitle;
+        }
+        updateColumnEmptyState(rv, tvEmpty, 0);
     }
 
     private void moveTask(TodoItem item) {
-        item.status = (item.status + 1) % 3;
-        Context appContext = requireContext().getApplicationContext();
+        if (item.status >= 2) {
+            Toast.makeText(getContext(), "任务已完成，无需继续流转", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        item.status = item.status + 1;
+        Context context = getContext();
+        if (context == null) {
+            return;
+        }
+        Context appContext = context.getApplicationContext();
 
         new Thread(() -> {
             try {
                 AppDatabase.getInstance(appContext).todoDao().update(item);
-                
                 if (isAdded() && getActivity() != null) {
                     getActivity().runOnUiThread(() -> {
-                        refreshKanban();
+                        loadDataFromDb();
                         Toast.makeText(getContext(), "状态已同步", Toast.LENGTH_SHORT).show();
                     });
                 }
@@ -134,17 +168,26 @@ public class TodoFragment extends Fragment {
         List<TodoItem> done = new ArrayList<>();
 
         for (TodoItem item : localTaskData) {
-            // 严格匹配看板 Key
-            if (currentBoardKey.equals(item.boardKey)) {
-                if (item.status == 0) todo.add(item);
-                else if (item.status == 1) processing.add(item);
-                else if (item.status == 2) done.add(item);
-            }
+            if (item == null) continue;
+            if (item.status == 0) todo.add(item);
+            else if (item.status == 1) processing.add(item);
+            else if (item.status == 2) done.add(item);
         }
+        sortTasksForKanban(todo);
+        sortTasksForKanban(processing);
+        sortTasksForKanban(done);
 
-        if (todoAdapter != null) todoAdapter.updateList(todo);
-        if (processAdapter != null) processAdapter.updateList(processing);
-        if (doneAdapter != null) doneAdapter.updateList(done);
+        if (todoAdapter != null) {
+            todoAdapter.updateList(todo);
+        }
+        if (processAdapter != null) {
+            processAdapter.updateList(processing);
+        }
+        if (doneAdapter != null) {
+            doneAdapter.updateList(done);
+        }
+        updateColumnTitles(todo.size(), processing.size(), done.size());
+        syncColumnEmptyStates(todo.size(), processing.size(), done.size());
     }
 
     private void showAddDialog() {
@@ -169,10 +212,14 @@ public class TodoFragment extends Fragment {
     }
 
     private void addNewTaskLocal(String content, String priority) {
-        String todayDate = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
+        String todayDate = getTodayDate();
         // ID 传 null，让 Room 自动生成
         TodoItem newItem = new TodoItem(null, content, 0, priority, currentBoardKey, todayDate);
-        Context appContext = requireContext().getApplicationContext();
+        Context context = getContext();
+        if (context == null) {
+            return;
+        }
+        Context appContext = context.getApplicationContext();
 
         new Thread(() -> {
             try {
@@ -204,5 +251,53 @@ public class TodoFragment extends Fragment {
 
     private void syncWithBackend(TodoItem item) {
         Log.d("ANTI_LOG", "新任务准备同步: " + item.content);
+    }
+
+    private void sortTasksForKanban(List<TodoItem> tasks) {
+        Collections.sort(tasks, Comparator
+                .comparingInt((TodoItem task) -> priorityRank(task.priority))
+                .thenComparingLong(task -> task.id == null ? Long.MAX_VALUE : task.id));
+    }
+
+    private int priorityRank(String priority) {
+        if ("高".equals(priority)) return 0;
+        if ("中".equals(priority)) return 1;
+        return 2;
+    }
+
+    private String getTodayDate() {
+        return new SimpleDateFormat(DATE_PATTERN, Locale.getDefault()).format(new Date());
+    }
+
+    private void updateColumnTitles(int todoCount, int processingCount, int doneCount) {
+        if (todoTitleView != null) {
+            todoTitleView.setText("待处理 (" + todoCount + ")");
+        }
+        if (processingTitleView != null) {
+            processingTitleView.setText("进行中 (" + processingCount + ")");
+        }
+        if (doneTitleView != null) {
+            doneTitleView.setText("已完成 (" + doneCount + ")");
+        }
+    }
+
+    private void syncColumnEmptyStates(int todoCount, int processingCount, int doneCount) {
+        updateColumnEmptyState(getView() == null ? null : getView().findViewById(R.id.colTodo), todoCount);
+        updateColumnEmptyState(getView() == null ? null : getView().findViewById(R.id.colProcessing), processingCount);
+        updateColumnEmptyState(getView() == null ? null : getView().findViewById(R.id.colDone), doneCount);
+    }
+
+    private void updateColumnEmptyState(View column, int count) {
+        if (column == null) return;
+        RecyclerView rv = column.findViewById(R.id.rvTaskList);
+        TextView tvEmpty = column.findViewById(R.id.tvColumnEmpty);
+        updateColumnEmptyState(rv, tvEmpty, count);
+    }
+
+    private void updateColumnEmptyState(RecyclerView rv, TextView tvEmpty, int count) {
+        if (rv == null || tvEmpty == null) return;
+        boolean isEmpty = count <= 0;
+        rv.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
+        tvEmpty.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
     }
 }

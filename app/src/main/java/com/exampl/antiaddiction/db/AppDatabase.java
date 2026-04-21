@@ -4,12 +4,14 @@ import android.content.Context;
 import androidx.room.Database;
 import androidx.room.Room;
 import androidx.room.RoomDatabase;
+import com.exampl.antiaddiction.model.DailyUsageRecord;
 import com.exampl.antiaddiction.model.TodoItem;
 
-@Database(entities = {TodoItem.class}, version = 1, exportSchema = false)
+@Database(entities = {TodoItem.class, DailyUsageRecord.class}, version = 2, exportSchema = false)
 public abstract class AppDatabase extends RoomDatabase {
 
     public abstract TodoDao todoDao();
+    public abstract DailyUsageDao dailyUsageDao();
 
     private static AppDatabase instance;
 

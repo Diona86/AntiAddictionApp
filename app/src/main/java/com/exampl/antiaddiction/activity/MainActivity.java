@@ -22,7 +22,9 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.Log;
 import android.util.TypedValue;
@@ -93,12 +95,16 @@ public class MainActivity extends AppCompatActivity {
 
         //检查系统权限
         Log.d("ANTI_LOG", "正在查看相关权限");
-        if (!hasUsageStatsPermission()) {
-            startActivities(new Intent[]{new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)});
-        } else {
-            Log.d("ANTI_LOG", "已授权应用使用查看权限");
+        String role = UserManager.getInstance(this).getRole();
+        if ("self".equals(role) || "child".equals(role)) {
+            if (!hasUsageStatsPermission()) {
+                startActivities(new Intent[]{new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)});
+            } else {
+                Log.d("ANTI_LOG", "已授权应用使用查看权限");
+            }
         }
         ensureNotificationPermissionIfNeeded();
+        requestIgnoreBatteryOptimizations();
         startOrStopUsageMonitorService();
 
         //绑定控件
@@ -162,10 +168,19 @@ public class MainActivity extends AppCompatActivity {
         setupNavigation(bottomNav,navView);
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 从系统设置页返回后，重新检查权限并拉起服务，避免只在 onCreate 启动一次
+        startOrStopUsageMonitorService();
+    }
+
     private void startOrStopUsageMonitorService() {
         String role = UserManager.getInstance(this).getRole();
         Intent serviceIntent = new Intent(this, UsageMonitorService.class);
-        if ("self".equals(role) && hasUsageStatsPermission()) {
+        if (("self".equals(role) || "child".equals(role)) && hasUsageStatsPermission()) {
+            ContextCompat.startForegroundService(this, serviceIntent);
+        } else if ("supervisor".equals(role) || "parent".equals(role)) {
             ContextCompat.startForegroundService(this, serviceIntent);
         } else {
             stopService(serviceIntent);
@@ -178,6 +193,23 @@ public class MainActivity extends AppCompatActivity {
                     != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, REQ_POST_NOTI);
             }
+        }
+    }
+
+    private void requestIgnoreBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return;
+        }
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        if (pm == null || pm.isIgnoringBatteryOptimizations(getPackageName())) {
+            return;
+        }
+        try {
+            Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+        } catch (Exception e) {
+            Log.e("ANTI_LOG", "请求忽略电池优化失败", e);
         }
     }
 

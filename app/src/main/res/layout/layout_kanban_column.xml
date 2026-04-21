@@ -28,5 +28,17 @@
             android:id="@+id/rvTaskList"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
+
+        <TextView
+            android:id="@+id/tvColumnEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:paddingTop="32dp"
+            android:text="暂无任务"
+            android:textColor="#9E9E9E"
+            android:textSize="13sp"
+            android:visibility="gone" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

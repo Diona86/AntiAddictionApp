@@ -2,14 +2,17 @@ package com.exampl.antiaddiction.fragment;
 
 import static com.exampl.antiaddiction.utils.Utils.formatTime;
 
+import android.app.usage.UsageEvents;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.InputType;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -32,8 +35,10 @@ import com.exampl.antiaddiction.adapter.ChildDashboardAdapter;
 import com.exampl.antiaddiction.adapter.UsageAdapter;
 import com.exampl.antiaddiction.cloudbase.CloudBaseCallback;
 import com.exampl.antiaddiction.cloudbase.CloudBaseClient;
+import com.exampl.antiaddiction.db.AppDatabase;
 import com.exampl.antiaddiction.manager.UserManager;
 import com.exampl.antiaddiction.model.AppUsageInfo;
+import com.exampl.antiaddiction.model.DailyUsageRecord;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -43,11 +48,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public class StatFragment extends Fragment {
+    private static final long SUPERVISOR_REFRESH_INTERVAL_MS = 30 * 1000L;
 
     private RecyclerView mainRecyclerView;
     private View loadingContainer;
@@ -56,6 +64,19 @@ public class StatFragment extends Fragment {
     private String role;
     private CloudBaseClient cloudbase;
     private int pendingChildReports = 0;
+    private final Handler autoRefreshHandler = new Handler(Looper.getMainLooper());
+    private final Runnable supervisorAutoRefreshTask = new Runnable() {
+        @Override
+        public void run() {
+            if (!isAdded()) {
+                return;
+            }
+            if ("supervisor".equals(role)) {
+                loadData();
+                autoRefreshHandler.postDelayed(this, SUPERVISOR_REFRESH_INTERVAL_MS);
+            }
+        }
+    };
 
     @Nullable
     @Override
@@ -77,6 +98,22 @@ public class StatFragment extends Fragment {
         loadData();
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        // 每次回到看板都刷新一次，避免展示旧统计和旧限额
+        if (mainRecyclerView != null) {
+            loadData();
+        }
+        startAutoRefreshIfNeeded();
+    }
+
+    @Override
+    public void onPause() {
+        autoRefreshHandler.removeCallbacks(supervisorAutoRefreshTask);
+        super.onPause();
+    }
+
     private void loadData() {
         setLoading(true);
         if (role == null || role.trim().isEmpty()) {
@@ -86,6 +123,13 @@ public class StatFragment extends Fragment {
             runSelfLogic();
         } else {
             runSupervisorLogic();
+        }
+    }
+
+    private void startAutoRefreshIfNeeded() {
+        autoRefreshHandler.removeCallbacks(supervisorAutoRefreshTask);
+        if ("supervisor".equals(role)) {
+            autoRefreshHandler.postDelayed(supervisorAutoRefreshTask, SUPERVISOR_REFRESH_INTERVAL_MS);
         }
     }
 
@@ -101,11 +145,15 @@ public class StatFragment extends Fragment {
         calendar.set(java.util.Calendar.HOUR_OF_DAY, 0);
         calendar.set(java.util.Calendar.MINUTE, 0);
         calendar.set(java.util.Calendar.SECOND, 0);
+        calendar.set(java.util.Calendar.MILLISECOND, 0);
         long startTime = calendar.getTimeInMillis();
 
-        // 2. 抓取系统原始数据
-        List<UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
-        if (stats == null || stats.isEmpty()) {
+        // 2. 抓取系统原始数据（优先 events，保证前台持续使用时也能实时增长）
+        Map<String, Long> usageByPkg = collectUsageMillisByEvents(usm, startTime, endTime);
+        if (usageByPkg.isEmpty()) {
+            usageByPkg = collectUsageMillisByStats(usm, startTime, endTime);
+        }
+        if (usageByPkg.isEmpty()) {
             Log.e("ANTI_LOG", "系统未返回统计数据，请确认是否开启‘使用情况访问权限’");
             Toast.makeText(getContext(), "暂无统计数据，请先开启使用情况访问权限", Toast.LENGTH_SHORT).show();
             setLoading(false);
@@ -116,31 +164,16 @@ public class StatFragment extends Fragment {
         Map<String, AppUsageInfo> map = new HashMap<>();
         long totalMillis = 0;
 
-        for (UsageStats usageStats : stats) {
-            long time = usageStats.getTotalTimeInForeground();
+        for (Map.Entry<String, Long> entry : usageByPkg.entrySet()) {
+            if (entry == null) continue;
+            String pkg = entry.getKey();
+            Long timeObj = entry.getValue();
+            if (pkg == null || pkg.trim().isEmpty() || timeObj == null) continue;
+            long time = timeObj;
             if (time <= 0) continue;
-
-            String pkg = usageStats.getPackageName();
             totalMillis += time;
-
-            if (map.containsKey(pkg)) {
-                // 已存在，累加时长
-                AppUsageInfo existing = map.get(pkg);
-                if (existing != null) existing.usageTime += time;
-            } else {
-                // 新应用，抓取名字和图标
-                String appName;
-                Drawable icon;
-                try {
-                    ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
-                    appName = pm.getApplicationLabel(ai).toString();
-                    icon = pm.getApplicationIcon(ai);
-                } catch (Exception e) {
-                    appName = pkg; // 找不到名字就用包名
-                    icon = ContextCompat.getDrawable(requireContext(), R.mipmap.ic_launcher);
-                }
-                map.put(pkg, new AppUsageInfo(appName, pkg, icon, time, ""));
-            }
+            String appName = resolveAppName(pm, pkg);
+            map.put(pkg, new AppUsageInfo(appName, pkg, null, time, ""));
         }
 
         // 4. 转换、排序、格式化时间
@@ -154,6 +187,8 @@ public class StatFragment extends Fragment {
 
         // 5. 上报云端（同步到 usage_report 表）
         syncUsageToCloud(totalMillis, list);
+        // 同时落本地快照，让日历页可离线按天展示
+        saveDailyUsageToLocal(totalMillis, Collections.emptySet());
 
         // 6. 构造本地预览项显示在主 RecyclerView 中
         Map<String, Object> selfMap = new HashMap<>();
@@ -171,7 +206,115 @@ public class StatFragment extends Fragment {
         setLoading(false);
 
         // 8. 检查限额（如果超了就弹锁定窗）
-        checkAndEnforceLimit(totalMillis);
+        checkAndEnforceLimit(totalMillis, list);
+    }
+
+    private Map<String, Long> collectUsageMillisByEvents(UsageStatsManager usm, long startTime, long endTime) {
+        Map<String, Long> usageByPkg = new HashMap<>();
+        if (usm == null) {
+            return usageByPkg;
+        }
+        try {
+            UsageEvents usageEvents = usm.queryEvents(startTime, endTime);
+            if (usageEvents == null) {
+                return usageByPkg;
+            }
+            UsageEvents.Event event = new UsageEvents.Event();
+            String currentForegroundPkg = null;
+            long currentForegroundStartMs = -1L;
+            while (usageEvents.hasNextEvent()) {
+                usageEvents.getNextEvent(event);
+                String pkg = event.getPackageName();
+                if (pkg == null || pkg.trim().isEmpty()) {
+                    continue;
+                }
+                int type = event.getEventType();
+                long ts = event.getTimeStamp();
+                if (isForegroundEvent(type)) {
+                    if (currentForegroundPkg != null
+                            && currentForegroundStartMs > 0
+                            && ts > currentForegroundStartMs) {
+                        long delta = ts - currentForegroundStartMs;
+                        long old = usageByPkg.containsKey(currentForegroundPkg) ? usageByPkg.get(currentForegroundPkg) : 0L;
+                        usageByPkg.put(currentForegroundPkg, old + delta);
+                    }
+                    currentForegroundPkg = pkg;
+                    currentForegroundStartMs = ts;
+                } else if (isBackgroundEvent(type)) {
+                    if (currentForegroundPkg != null
+                            && currentForegroundPkg.equals(pkg)
+                            && currentForegroundStartMs > 0
+                            && ts > currentForegroundStartMs) {
+                        long delta = ts - currentForegroundStartMs;
+                        long old = usageByPkg.containsKey(pkg) ? usageByPkg.get(pkg) : 0L;
+                        usageByPkg.put(pkg, old + delta);
+                        currentForegroundPkg = null;
+                        currentForegroundStartMs = -1L;
+                    }
+                }
+            }
+            if (currentForegroundPkg != null
+                    && currentForegroundStartMs > 0
+                    && endTime > currentForegroundStartMs) {
+                long delta = endTime - currentForegroundStartMs;
+                long old = usageByPkg.containsKey(currentForegroundPkg) ? usageByPkg.get(currentForegroundPkg) : 0L;
+                usageByPkg.put(currentForegroundPkg, old + delta);
+            }
+        } catch (Exception e) {
+            Log.w("ANTI_LOG", "queryEvents 聚合失败: " + e.getMessage());
+        }
+        return usageByPkg;
+    }
+
+    private Map<String, Long> collectUsageMillisByStats(UsageStatsManager usm, long startTime, long endTime) {
+        Map<String, Long> usageByPkg = new HashMap<>();
+        if (usm == null) {
+            return usageByPkg;
+        }
+        try {
+            List<UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
+            if (stats == null) {
+                return usageByPkg;
+            }
+            for (UsageStats usageStats : stats) {
+                if (usageStats == null) continue;
+                String pkg = usageStats.getPackageName();
+                if (pkg == null || pkg.trim().isEmpty()) continue;
+                long time = usageStats.getTotalTimeInForeground();
+                if (time <= 0) continue;
+                usageByPkg.put(pkg, time);
+            }
+        } catch (Exception e) {
+            Log.w("ANTI_LOG", "queryUsageStats 回退失败: " + e.getMessage());
+        }
+        return usageByPkg;
+    }
+
+    private boolean isForegroundEvent(int type) {
+        if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+            return true;
+        }
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && type == UsageEvents.Event.ACTIVITY_RESUMED;
+    }
+
+    private boolean isBackgroundEvent(int type) {
+        if (type == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+            return true;
+        }
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && (type == UsageEvents.Event.ACTIVITY_PAUSED || type == UsageEvents.Event.ACTIVITY_STOPPED);
+    }
+
+    private String resolveAppName(PackageManager pm, String pkg) {
+        if (pm == null || pkg == null || pkg.trim().isEmpty()) {
+            return pkg == null ? "" : pkg;
+        }
+        try {
+            ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+            return pm.getApplicationLabel(ai).toString();
+        } catch (Exception e) {
+            return pkg;
+        }
     }
 
     // ================= 监管者流程 =================
@@ -219,15 +362,53 @@ public class StatFragment extends Fragment {
                             displayItem.put("totalTime", 0);
                             displayItem.put("appJson", "[]");
                         }
-                        displayData.add(displayItem);
-                        updateUI();
-                        onChildReportFinished();
+                        fetchPolicyForChild(displayItem, childId);
                     }
                     @Override
                     public void onError(int code, String message) {
-                        onChildReportFinished();
+                        Map<String, Object> fallbackItem = new HashMap<>(child);
+                        fallbackItem.put("userId", childId);
+                        fallbackItem.put("totalTime", 0);
+                        fallbackItem.put("appJson", "[]");
+                        fetchPolicyForChild(fallbackItem, childId);
                     }
                 });
+    }
+
+    private void fetchPolicyForChild(Map<String, Object> displayItem, String childId) {
+        String cleanChildId = childId.contains(".") ? childId.split("\\.")[0] : childId;
+        String policyPath = "/v1/rdb/rest/control_policy?userId=eq." + cleanChildId;
+        cloudbase.request("GET", policyPath, null, null, new TypeToken<List<Map<String, Object>>>() {}, new CloudBaseCallback<List<Map<String, Object>>>() {
+            @Override
+            public void onSuccess(List<Map<String, Object>> policies) {
+                bindPolicyToDisplayItem(displayItem, policies);
+                upsertDisplayItem(displayItem);
+                updateUI();
+                onChildReportFinished();
+            }
+
+            @Override
+            public void onError(int code, String message) {
+                bindPolicyToDisplayItem(displayItem, null);
+                upsertDisplayItem(displayItem);
+                updateUI();
+                onChildReportFinished();
+            }
+        });
+    }
+
+    private void bindPolicyToDisplayItem(Map<String, Object> displayItem, List<Map<String, Object>> policies) {
+        if (displayItem == null) {
+            return;
+        }
+        if (policies == null || policies.isEmpty()) {
+            displayItem.put("totalLimit", null);
+            displayItem.put("appLimits", "{}");
+            return;
+        }
+        Map<String, Object> policy = policies.get(0);
+        displayItem.put("totalLimit", policy.get("totalLimit"));
+        displayItem.put("appLimits", policy.get("appLimits") == null ? "{}" : String.valueOf(policy.get("appLimits")));
     }
 
     private void onChildReportFinished() {
@@ -241,6 +422,35 @@ public class StatFragment extends Fragment {
         if (loadingContainer != null) {
             loadingContainer.setVisibility(loading ? View.VISIBLE : View.GONE);
         }
+    }
+
+    private void upsertDisplayItem(Map<String, Object> item) {
+        String userId = String.valueOf(item.get("userId"));
+        for (int i = 0; i < displayData.size(); i++) {
+            Map<String, Object> existing = displayData.get(i);
+            if (userId.equals(String.valueOf(existing.get("userId")))) {
+                displayData.set(i, item);
+                sortDisplayDataByTotalTime();
+                return;
+            }
+        }
+        displayData.add(item);
+        sortDisplayDataByTotalTime();
+    }
+
+    private void sortDisplayDataByTotalTime() {
+        Collections.sort(displayData, (left, right) -> {
+            long leftTotal = parseTotalTime(left.get("totalTime"));
+            long rightTotal = parseTotalTime(right.get("totalTime"));
+            return Long.compare(rightTotal, leftTotal);
+        });
+    }
+
+    private long parseTotalTime(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        return 0L;
     }
 
     private void updateUI() {
@@ -287,14 +497,27 @@ public class StatFragment extends Fragment {
                 .setView(et)
                 .setPositiveButton("确认", (d, w) -> {
                     String val = et.getText().toString();
-                    if (!val.isEmpty()) {
-                        String rawId = userId;
-                        // 如果包含 ".0"，则截掉
-                        if (rawId.endsWith(".0")) {
-                            rawId = rawId.substring(0, rawId.length() - 2);
-                        }
-                        updatePolicy(rawId, pkg, Integer.parseInt(val));
+                    if (val.isEmpty()) {
+                        Toast.makeText(getContext(), "请输入分钟数", Toast.LENGTH_SHORT).show();
+                        return;
                     }
+                    int limitMinutes;
+                    try {
+                        limitMinutes = Integer.parseInt(val);
+                    } catch (NumberFormatException ex) {
+                        Toast.makeText(getContext(), "限额格式不正确", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (limitMinutes <= 0) {
+                        Toast.makeText(getContext(), "限额需大于 0 分钟", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    String rawId = userId;
+                    // 如果包含 ".0"，则截掉
+                    if (rawId.endsWith(".0")) {
+                        rawId = rawId.substring(0, rawId.length() - 2);
+                    }
+                    updatePolicy(rawId, pkg, limitMinutes);
                 }).show();
     }
 
@@ -316,7 +539,20 @@ public class StatFragment extends Fragment {
                     Map<String, Integer> currentLimits = new HashMap<>();
                     if (data != null && !data.isEmpty() && data.get(0).get("appLimits") != null) {
                         String oldJson = data.get(0).get("appLimits").toString();
-                        currentLimits = new Gson().fromJson(oldJson, new TypeToken<Map<String, Integer>>(){}.getType());
+                        try {
+                            Map<String, Double> oldLimits = new Gson().fromJson(oldJson, new TypeToken<Map<String, Double>>(){}.getType());
+                            if (oldLimits != null) {
+                                for (Map.Entry<String, Double> entry : oldLimits.entrySet()) {
+                                    if (entry.getKey() != null && entry.getValue() != null) {
+                                        currentLimits.put(entry.getKey(), entry.getValue().intValue());
+                                    }
+                                }
+                            }
+                        } catch (Exception ex) {
+                            Toast.makeText(getContext(), "原有限额数据异常，已取消本次覆盖，请稍后重试", Toast.LENGTH_SHORT).show();
+                            Log.e("ANTI_LOG", "appLimits 解析失败，取消更新: " + oldJson, ex);
+                            return;
+                        }
                     }
                     currentLimits.put(pkg, minutes); // 加入/更新本次设置
                     body.put("appLimits", new Gson().toJson(currentLimits));
@@ -327,7 +563,12 @@ public class StatFragment extends Fragment {
                 String finalPath = method.equals("PATCH") ? path : "/v1/rdb/rest/control_policy";
 
                 cloudbase.request(method, finalPath, body, null, null, new CloudBaseCallback<Object>() {
-                    @Override public void onSuccess(Object o) { Toast.makeText(getContext(), "管控已下发", Toast.LENGTH_SHORT).show(); }
+                    @Override
+                    public void onSuccess(Object o) {
+                        Toast.makeText(getContext(), "管控已下发", Toast.LENGTH_SHORT).show();
+                        // 设置后立刻刷新，避免家长端还显示旧限额
+                        loadData();
+                    }
                     @Override public void onError(int c, String m) { Log.e("ANTI_LOG", "更新失败: " + m); }
                 });
             }
@@ -377,7 +618,7 @@ public class StatFragment extends Fragment {
             }
         });
     }
-    private void checkAndEnforceLimit(long currentLocalMillis) {
+    private void checkAndEnforceLimit(long currentLocalMillis, List<AppUsageInfo> todayApps) {
         Log.d("ANTI_LOG","检查限额逻辑");
         String rawId = UserManager.getInstance(requireContext()).getUserId();
         // 强制去掉 .0
@@ -392,7 +633,11 @@ public class StatFragment extends Fragment {
         cloudbase.request("GET", path, null, null, new TypeToken<List<Map<String, Object>>>() {}, new CloudBaseCallback<List<Map<String, Object>>>() {
             @Override
             public void onSuccess(List<Map<String, Object>> data) {
-                if (data == null || data.isEmpty()) { Log.w("ANTI_LOG","限额数据访问成功但是数据为空"); return;}
+                if (data == null || data.isEmpty()) {
+                    Log.w("ANTI_LOG","限额数据访问成功但是数据为空");
+                    saveDailyUsageToLocal(currentLocalMillis, Collections.emptySet());
+                    return;
+                }
                 Log.d("data",data.toString());
                 Map<String, Object> policy = data.get(0);
                 Log.d("policy",policy.toString());
@@ -420,19 +665,28 @@ public class StatFragment extends Fragment {
 
                 // --- 校验 2: 单应用时长拦截 (可选功能，按需开启) ---
                 if (policy.get("appLimits") != null) {
-                    String appLimitsStr = (String) policy.get("appLimits");
+                    String appLimitsStr = String.valueOf(policy.get("appLimits"));
                     // 解析格式如 {"com.tencent.mm": 30} 的 Map
                     Map<String, Double> appLimitsMap = new Gson().fromJson(appLimitsStr, new TypeToken<Map<String, Double>>(){}.getType());
+                    if (appLimitsMap == null) {
+                        appLimitsMap = new HashMap<>();
+                    }
+
+                    Set<String> overLimitApps = collectOverLimitApps(todayApps, appLimitsMap);
+                    saveDailyUsageToLocal(currentLocalMillis, overLimitApps);
 
                     // 此时我们需要拿到刚才 loadUsageData 算出来的 appMap
                     // 假设你已经把 loadUsageData 里的 map 存为了成员变量 currentAppMap
                     checkIndividualApps(appLimitsMap);
+                } else {
+                    saveDailyUsageToLocal(currentLocalMillis, Collections.emptySet());
                 }
             }
 
             @Override
             public void onError(int code, String message) {
                 Log.e("ANTI_LOG", "拉取管控策略失败: " + message);
+                saveDailyUsageToLocal(currentLocalMillis, Collections.emptySet());
             }
         });
     }
@@ -473,5 +727,47 @@ public class StatFragment extends Fragment {
         // 这个逻辑通常需要配合一个“当前运行中”的监测
         // 在 StatFragment 这种静态列表里，你可以根据之前算出的 list 进行循环判定
         // 如果某个包名的已用时间 > 限额，直接弹出对应的 App 锁定提示
+    }
+
+    private Set<String> collectOverLimitApps(List<AppUsageInfo> apps, Map<String, Double> appLimitsMap) {
+        Set<String> result = new HashSet<>();
+        if (apps == null || apps.isEmpty() || appLimitsMap == null || appLimitsMap.isEmpty()) {
+            return result;
+        }
+        for (AppUsageInfo app : apps) {
+            if (app == null || app.packageName == null) {
+                continue;
+            }
+            Double limitMinutes = appLimitsMap.get(app.packageName);
+            if (limitMinutes == null || limitMinutes <= 0) {
+                continue;
+            }
+            long usedMinutes = app.usageTime / 1000 / 60;
+            if (usedMinutes >= limitMinutes.intValue()) {
+                result.add(app.appName == null ? app.packageName : app.appName);
+            }
+        }
+        return result;
+    }
+
+    private void saveDailyUsageToLocal(long totalMillis, Set<String> overLimitApps) {
+        if (!isAdded() || getContext() == null) {
+            return;
+        }
+        String dateStr = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
+        Set<String> safeSet = overLimitApps == null ? Collections.emptySet() : overLimitApps;
+        DailyUsageRecord record = new DailyUsageRecord(
+                dateStr,
+                totalMillis,
+                new Gson().toJson(new ArrayList<>(safeSet))
+        );
+        Context appContext = requireContext().getApplicationContext();
+        new Thread(() -> {
+            try {
+                AppDatabase.getInstance(appContext).dailyUsageDao().upsert(record);
+            } catch (Exception e) {
+                Log.e("ANTI_LOG", "写入每日使用记录失败", e);
+            }
+        }).start();
     }
 }

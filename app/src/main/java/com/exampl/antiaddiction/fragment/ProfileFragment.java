@@ -32,7 +32,6 @@ import com.google.gson.reflect.TypeToken;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Timer;
 
 public class ProfileFragment extends Fragment {
 
@@ -58,8 +57,11 @@ public class ProfileFragment extends Fragment {
 
         //设定绑定行
         setupRow(view.findViewById(R.id.rowBound),"绑定",R.drawable.ic_add,"#535788");
+        // 保留顶部 5 个模块，最后一项先做轻量占位，不做跳转
+        setupRow(view.findViewById(R.id.rowMore), "通用设置", R.drawable.ic_today, "#8C8FA8");
         // 4. 退出登录点击
         view.findViewById(R.id.btnLogout).setOnClickListener(v -> {
+            UserManager.getInstance(requireContext()).logout();
             Toast.makeText(getContext(), "已退出登录", Toast.LENGTH_SHORT).show();
             Utils.jumpPage(requireActivity(),LoginActivity.class,"source","profile");
         });

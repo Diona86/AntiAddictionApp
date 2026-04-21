@@ -32,6 +32,14 @@
                 android:layout_marginStart="8dp"
                 android:text="自律者姓名"
                 android:textStyle="bold" />
+            <TextView
+                android:id="@+id/tvTotalLimitInline"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:text="总限额：未设置"
+                android:textColor="#666666"
+                android:textSize="12sp" />
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSetTotalLimit"
                 style="@style/Widget.MaterialComponents.Button.TextButton"

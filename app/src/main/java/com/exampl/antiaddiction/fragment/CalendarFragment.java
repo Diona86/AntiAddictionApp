@@ -1,6 +1,5 @@
 package com.exampl.antiaddiction.fragment;
 
-import android.app.usage.UsageStats;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -14,11 +13,18 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.exampl.antiaddiction.R;
-import com.exampl.antiaddiction.adapter.TodoAdapter;
+import com.exampl.antiaddiction.adapter.CalendarTaskAdapter;
 import com.exampl.antiaddiction.db.AppDatabase;
+import com.exampl.antiaddiction.model.DailyUsageRecord;
 import com.exampl.antiaddiction.model.TodoItem;
+import com.exampl.antiaddiction.utils.Utils;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -26,8 +32,11 @@ public class CalendarFragment extends Fragment {
 
     private CalendarView calendarView;
     private RecyclerView recyclerView;
-    private TodoAdapter adapter;
+    private CalendarTaskAdapter adapter;
     private TextView tvDateHint;
+    private TextView tvUsageTotal;
+    private TextView tvOverLimitApps;
+    private TextView tvTaskSummary;
 
     @Nullable
     @Override
@@ -37,28 +46,39 @@ public class CalendarFragment extends Fragment {
         calendarView = view.findViewById(R.id.calendarView);
         recyclerView = view.findViewById(R.id.rvCalendarTasks);
         tvDateHint = view.findViewById(R.id.tvSelectedDate);
+        tvUsageTotal = view.findViewById(R.id.tvUsageTotal);
+        tvOverLimitApps = view.findViewById(R.id.tvOverLimitApps);
+        tvTaskSummary = view.findViewById(R.id.tvTaskSummary);
 
         // 初始化列表
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-        // 这里复用之前的 TodoAdapter，点击逻辑暂时传空或者传弹窗
-        adapter = new TodoAdapter(new ArrayList<>(), item -> {
-            // 这里可以点一下弹出任务详情，或者切换状态
-        });
+        recyclerView.setNestedScrollingEnabled(false);
+        adapter = new CalendarTaskAdapter(new ArrayList<>());
         recyclerView.setAdapter(adapter);
 
         // 1. 设置日历点击监听
         calendarView.setOnDateChangeListener((view1, year, month, dayOfMonth) -> {
             // 注意：month 是从 0 开始的（1月是0），所以要 +1
             String selectedDate = String.format(Locale.getDefault(), "%d-%02d-%02d", year, month + 1, dayOfMonth);
-
-            // 2. 更新标题提示
-            tvDateHint.setText(selectedDate + " 的任务清单");
-
-            // 3. 去数据库查数据并刷新列表
-            loadTasksFromDb(selectedDate);
+            loadCalendarData(selectedDate);
         });
 
+        // 默认加载今天
+        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendarView.getDate());
+        loadCalendarData(today);
+
         return view;
+    }
+
+    private void loadCalendarData(String date) {
+        // 1. 更新标题提示
+        tvDateHint.setText(date + " 使用概览");
+
+        // 2. 加载任务列表
+        loadTasksFromDb(date);
+
+        // 3. 加载每日使用统计
+        loadUsageSummary(date);
     }
 
     private void loadTasksFromDb(String date) {
@@ -67,10 +87,56 @@ public class CalendarFragment extends Fragment {
         List<TodoItem> tasks = AppDatabase.getInstance(requireContext())
                 .todoDao()
                 .getTasksByDate(date);
+        if (tasks == null) {
+            tasks = new ArrayList<>();
+        }
+        // 日历视图优先展示未完成任务，再展示已完成任务
+        Collections.sort(tasks, Comparator
+                .comparingInt((TodoItem t) -> t.status == 2 ? 1 : 0)
+                .thenComparing(t -> t.priority == null ? "中" : t.priority));
 
         // 4. 把查到的数据喂给 Adapter
         if(adapter!=null) {
             adapter.updateList(tasks);
         }
+        updateTaskSummary(tasks);
+    }
+
+    private void loadUsageSummary(String date) {
+        DailyUsageRecord record = AppDatabase.getInstance(requireContext())
+                .dailyUsageDao()
+                .getByDate(date);
+
+        if (record == null) {
+            tvUsageTotal.setText("应用总时长: 暂无记录");
+            tvOverLimitApps.setText("超额应用: 无");
+            return;
+        }
+
+        tvUsageTotal.setText("应用总时长: " + Utils.formatTime(record.totalUsageMillis));
+        List<String> overApps = new Gson().fromJson(record.overLimitAppsJson, new TypeToken<List<String>>() {}.getType());
+        if (overApps == null || overApps.isEmpty()) {
+            tvOverLimitApps.setText("超额应用: 无");
+        } else {
+            tvOverLimitApps.setText("超额应用: " + android.text.TextUtils.join("、", overApps));
+        }
+    }
+
+    private void updateTaskSummary(List<TodoItem> tasks) {
+        if (tvTaskSummary == null) {
+            return;
+        }
+        int doneCount = 0;
+        int todoCount = 0;
+        if (tasks != null) {
+            for (TodoItem item : tasks) {
+                if (item != null && item.status == 2) {
+                    doneCount++;
+                } else {
+                    todoCount++;
+                }
+            }
+        }
+        tvTaskSummary.setText("未完成 " + todoCount + " · 已完成 " + doneCount);
     }
 }

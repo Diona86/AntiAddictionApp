@@ -55,12 +55,7 @@ public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAd
         Context context = holder.itemView.getContext();
         Map<String, Object> item = dataList.get(position);
         String userId = String.valueOf(item.get("userId"));
-        String name = String.valueOf(item.get("username"));
-        if(name.equals("null")) {
-            Log.d("ANTI_LOG",name);
-            name = UserManager.getInstance(context).getUsername();
-        }
-        Log.d("ANTI_LOG",name);
+        String name = resolveDisplayName(item, context);
         holder.tvName.setText(name);
 
         long totalMillis = 0L;
@@ -71,16 +66,24 @@ public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAd
         holder.tvTotal.setText(formatTime(totalMillis));
 
         // 进度条逻辑 (假设总限额存在)
-        int totalLimit = 480;
+        Integer totalLimit = null;
         Object totalLimitObj = item.get("totalLimit");
         if (totalLimitObj instanceof Number) {
-            totalLimit = ((Number) totalLimitObj).intValue();
+            int parsed = ((Number) totalLimitObj).intValue();
+            if (parsed > 0) {
+                totalLimit = parsed;
+            }
         }
-        if (totalLimit <= 0) {
-            totalLimit = 1;
+        if (totalLimit == null) {
+            holder.pb.setVisibility(View.GONE);
+        } else {
+            holder.pb.setVisibility(View.VISIBLE);
+            int progress = (int) ((totalMillis / 1000.0 / 60.0 / totalLimit) * 100);
+            holder.pb.setProgress(Math.min(progress, 100));
         }
-        int progress = (int) ((totalMillis / 1000.0 / 60.0 / totalLimit) * 100);
-        holder.pb.setProgress(Math.min(progress, 100));
+        holder.tvTotalLimitInline.setText(totalLimit == null
+                ? "总限额：未设置"
+                : "总限额：" + totalLimit + " 分钟");
 
         // 加载 App 列表
         String appJson = item.get("appJson") == null ? "[]" : String.valueOf(item.get("appJson"));
@@ -142,14 +145,36 @@ public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAd
         return String.format("%02dh %02dm", hours, minutes);
     }
 
+    private String resolveDisplayName(Map<String, Object> item, Context context) {
+        Object usernameObj = item.get("username");
+        if (usernameObj != null) {
+            String username = String.valueOf(usernameObj).trim();
+            if (!username.isEmpty() && !"null".equalsIgnoreCase(username)) {
+                return username;
+            }
+        }
+        Object nicknameObj = item.get("nickname");
+        if (nicknameObj != null) {
+            String nickname = String.valueOf(nicknameObj).trim();
+            if (!nickname.isEmpty() && !"null".equalsIgnoreCase(nickname)) {
+                return nickname;
+            }
+        }
+        return UserManager.getInstance(context).getUsername();
+    }
+
     @Override public int getItemCount() { return dataList.size(); }
 
     static class VH extends RecyclerView.ViewHolder {
-        TextView tvName, tvTotal; ProgressBar pb; RecyclerView rvApps; View btnLimit;
+        TextView tvName, tvTotal, tvTotalLimitInline;
+        ProgressBar pb;
+        RecyclerView rvApps;
+        View btnLimit;
         VH(View v) {
             super(v);
             tvName = v.findViewById(R.id.tvChildName);
             tvTotal = v.findViewById(R.id.tvTotalTimeDisplay);
+            tvTotalLimitInline = v.findViewById(R.id.tvTotalLimitInline);
             pb = v.findViewById(R.id.pbChildProgress);
             rvApps = v.findViewById(R.id.rvChildAppList);
             btnLimit = v.findViewById(R.id.btnSetTotalLimit);
