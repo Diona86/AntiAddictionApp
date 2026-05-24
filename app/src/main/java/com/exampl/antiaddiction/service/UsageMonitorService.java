@@ -28,9 +28,11 @@ import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 
 import com.exampl.antiaddiction.R;
+import com.exampl.antiaddiction.activity.LockActivity;
 import com.exampl.antiaddiction.activity.MainActivity;
 import com.exampl.antiaddiction.cloudbase.CloudBaseCallback;
 import com.exampl.antiaddiction.cloudbase.CloudBaseClient;
+import com.exampl.antiaddiction.data.common.UserIdNormalizer;
 import com.exampl.antiaddiction.manager.UserManager;
 import com.exampl.antiaddiction.model.AppUsageInfo;
 import com.google.gson.Gson;
@@ -66,6 +68,9 @@ public class UsageMonitorService extends Service {
     private static final long BINDING_REFRESH_INTERVAL_MS = 2 * 60 * 1000L;
     private static final long EVENT_UPLOAD_COOLDOWN_MS = 5 * 60 * 1000L;
     private static final long LIMIT_NOTIFY_COOLDOWN_MS = 30 * 60 * 1000L;
+    private static final long LOCK_LAUNCH_COOLDOWN_MS = 60 * 1000L;
+    /** 临时关闭：超限时不自动拉起 LockActivity */
+    private static final boolean ENABLE_LOCK_ACTIVITY = false;
 
     private final Map<String, Long> limitNotifyCache = new ConcurrentHashMap<>();
     private final Gson gson = new Gson();
@@ -92,6 +97,8 @@ public class UsageMonitorService extends Service {
     private volatile boolean limitEventTableAvailable = true;
     // 云表字段可能尚未升级，先尝试扩展字段，失败后自动降级
     private volatile boolean supportsExtendedUsageColumns = true;
+    private volatile long lastLockLaunchMs = 0L;
+    private volatile String lastLockLaunchDate = "";
 
     private final Runnable monitorTask = new Runnable() {
         @Override
@@ -228,6 +235,7 @@ public class UsageMonitorService extends Service {
 
         refreshPolicyIfNeeded(userId);
         OverLimitState overLimitState = evaluateOverLimit(totalMillis, appMap);
+        launchLockIfNeeded(overLimitState);
         Log.d(TAG, "self tick totalMillis=" + totalMillis + ", appCount=" + list.size() + ", overLimit=" + overLimitState.hasOverLimit);
         syncUsageToCloud(userId, totalMillis, list, overLimitState);
         refreshSelfBindingIfNeeded(userId);
@@ -708,14 +716,7 @@ public class UsageMonitorService extends Service {
     }
 
     private String normalizeUserId(String rawUserId) {
-        if (rawUserId == null) {
-            return "";
-        }
-        String trimmed = rawUserId.trim();
-        if (trimmed.endsWith(".0")) {
-            return trimmed.substring(0, trimmed.length() - 2);
-        }
-        return trimmed;
+        return UserIdNormalizer.normalize(rawUserId);
     }
 
     private String buildReadableOverLimitDetail(Object detailObj) {
@@ -1078,7 +1079,7 @@ public class UsageMonitorService extends Service {
             return;
         }
 
-        String cleanUserId = userId.contains(".") ? userId.split("\\.")[0] : userId;
+        String cleanUserId = UserIdNormalizer.normalizeForCloudQuery(userId);
         String path = "/v1/rdb/rest/control_policy?userId=eq." + cleanUserId;
         policyFetching = true;
         cloudbase.request("GET", path, null, null, new TypeToken<List<Map<String, Object>>>() {}, new CloudBaseCallback<List<Map<String, Object>>>() {
@@ -1146,6 +1147,34 @@ public class UsageMonitorService extends Service {
 
         state.summary = overItems.isEmpty() ? "" : gson.toJson(overItems);
         return state;
+    }
+
+    private void launchLockIfNeeded(OverLimitState overLimitState) {
+        if (!ENABLE_LOCK_ACTIVITY) {
+            return;
+        }
+        if (overLimitState == null || !overLimitState.hasOverLimit) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date(now));
+        if (today.equals(lastLockLaunchDate) && (now - lastLockLaunchMs) < LOCK_LAUNCH_COOLDOWN_MS) {
+            return;
+        }
+
+        String detail = buildReadableOverLimitDetail(overLimitState.summary);
+        String message = detail.isEmpty() ? "今日使用已超限，请先休息一会儿。" : "已检测到超限：\n" + detail;
+        Intent intent = new Intent(this, LockActivity.class);
+        intent.putExtra(LockActivity.EXTRA_LIMIT_MESSAGE, message);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        try {
+            startActivity(intent);
+            lastLockLaunchMs = now;
+            lastLockLaunchDate = today;
+            Log.i(TAG, "lock activity launched for over-limit");
+        } catch (Exception e) {
+            Log.e(TAG, "launch lock activity failed", e);
+        }
     }
 
     private static class OverLimitState {

@@ -34,7 +34,6 @@ public class LoginActivity extends AppCompatActivity {
     private TextInputEditText etPassword;
     private RadioButton radioChild;
     private Button btnLogin;
-    private Button testLogin;
 
 
     @Override
@@ -54,7 +53,6 @@ public class LoginActivity extends AppCompatActivity {
         // 初始化控件
 
         etUsername = findViewById(R.id.etUsername);
-        testLogin =findViewById(R.id.tsLogin);
         etPassword = findViewById(R.id.etPassword);
         radioChild = findViewById(R.id.radioChild);
         btnLogin = findViewById(R.id.btnLogin);
@@ -68,10 +66,6 @@ public class LoginActivity extends AppCompatActivity {
 
         // 登录按钮
         btnLogin.setOnClickListener(v -> login());
-        testLogin.setOnClickListener(v->{
-            Utils.jumpPage(LoginActivity.this,MainActivity.class,"",null);
-            //doTest();
-        });
 
         // 设置窗口边距
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.login), (v, insets) -> {
@@ -79,44 +73,6 @@ public class LoginActivity extends AppCompatActivity {
             v.setPadding(systemBars.left, 0, systemBars.right, systemBars.bottom);
             return insets;
         });
-    }
-
-    private void doTest() {
-        CloudBaseClient cloudbase=new CloudBaseClient(getString(R.string.CLOUDBASE_ENV_ID),getString(R.string.CLOUDBASE_ACCESS_TOKEN));
-        TypeToken<List<Map<String, Object>>> typeToken = new TypeToken<List<Map<String, Object>>>() {};
-        cloudbase.<List<Map<String,Object>>>request(
-                "GET",
-                "/v1/rdb/rest/user?limit=10",
-                null,   // GET 请求无 body
-                null,   // 无额外 headers
-                typeToken,
-                new CloudBaseCallback<List<Map<String, Object>>>() {
-                    @Override
-                    public void onSuccess(List<Map<String, Object>> data) {
-                        if (data == null || data.isEmpty()) {
-                            Log.e("CloudBase", "用户不存在");
-                            return;
-                        }
-
-                        Map<String, Object> user = data.get(0);
-                        String storedPassword = (String) user.get("password");
-
-                        if ("123456".equals(storedPassword)) { // 加密的话这里也要先加密再比对
-                            Log.d("CloudBase", "登录成功，用户id: " + user.get("id"));
-                            // 跳转页面等后续逻辑
-                        } else {
-                            Log.e("CloudBase", "密码错误");
-                        }
-                    }
-
-                    @Override
-                    public void onError(int code, String message) {
-                        Log.e("CloudBase", "请求失败 " + code + ": " + message);
-                        Toast.makeText(LoginActivity.this, "请求失败: " + message, Toast.LENGTH_SHORT).show();
-                        Log.d("Anti_LOG",message);
-                    }
-                }
-        );
     }
 
     private void login() {

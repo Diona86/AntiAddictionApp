@@ -14,4 +14,8 @@
     <string name="navigation_drawer_open">打开导航抽屉</string>
     <string name="navigation_drawer_close">关闭导航抽屉</string>
     <string-array name="priority_array"> <item>高</item> <item>中</item> <item>低</item> </string-array>
+    <string name="stat_child_unnamed">自律者</string>
+    <string name="stat_chart_switch_label">图表查看</string>
+    <string name="stat_chart_scope_hint">上方饼图与今日趋势：%1$s（云端今日上报）</string>
+    <string name="stat_week_supervisor_note">监管端「近 7 天」为当前手机本地记录，与自律者设备不一致，已隐藏。历史趋势请在对应自律者手机查看。</string>
 </resources>

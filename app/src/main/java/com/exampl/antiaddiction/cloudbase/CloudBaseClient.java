@@ -141,4 +141,20 @@ public class CloudBaseClient {
             }
         });
     }
+
+    public <T> void get(String path, TypeToken<T> typeToken, CloudBaseCallback<T> callback) {
+        request("GET", path, null, null, typeToken, callback);
+    }
+
+    public <T> void post(String path, Object body, TypeToken<T> typeToken, CloudBaseCallback<T> callback) {
+        request("POST", path, body, null, typeToken, callback);
+    }
+
+    public <T> void patch(String path, Object body, TypeToken<T> typeToken, CloudBaseCallback<T> callback) {
+        request("PATCH", path, body, null, typeToken, callback);
+    }
+
+    public <T> void delete(String path, Object body, TypeToken<T> typeToken, CloudBaseCallback<T> callback) {
+        request("DELETE", path, body, null, typeToken, callback);
+    }
 }

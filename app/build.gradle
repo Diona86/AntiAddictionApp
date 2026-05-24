@@ -52,9 +52,12 @@ dependencies {
     implementation 'com.google.android.material:material:1.9.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation(libs.activity)
+    implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
 
     // 3. 这里的 lifecycle 库建议也写死版本，防止 libs 定义冲突
     implementation libs.lifecycle.runtime.ktx.v261
+    implementation 'androidx.lifecycle:lifecycle-viewmodel:2.6.1'
+    implementation 'androidx.lifecycle:lifecycle-livedata:2.6.1'
     implementation libs.androidx.annotation
 
     // 测试相关 (保持原样)

@@ -49,7 +49,7 @@ import com.exampl.antiaddiction.cloudbase.CloudBaseClient;
 import com.exampl.antiaddiction.fragment.CalendarFragment;
 import com.exampl.antiaddiction.fragment.ClockFragment;
 import com.exampl.antiaddiction.fragment.ProfileFragment;
-import com.exampl.antiaddiction.fragment.StatFragment;
+import com.exampl.antiaddiction.fragment.StatPageFragment;
 import com.exampl.antiaddiction.fragment.TodoFragment;
 import com.exampl.antiaddiction.manager.UserManager;
 import com.exampl.antiaddiction.model.AppUsageInfo;
@@ -139,7 +139,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (savedInstanceState == null) {
             getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.mainFragmentContainer, new StatFragment())
+                    .replace(R.id.mainFragmentContainer, new StatPageFragment())
                     .commit();
             toolbar.setTitle("统计"); // 初始标题
         }
@@ -230,7 +230,7 @@ public class MainActivity extends AppCompatActivity {
             Fragment selectedFragment = null;
             String title = "";
             int id = item.getItemId();
-            if (id == R.id.nav_stat) { selectedFragment = new StatFragment(); title = "统计"; }
+            if (id == R.id.nav_stat) { selectedFragment = new StatPageFragment(); title = "统计"; }
             else if (id == R.id.nav_todo) { selectedFragment = new TodoFragment(); title = "任务"; }
             else if (id == R.id.nav_clock) { selectedFragment = new ClockFragment(); title = "专注"; }
             else if (id == R.id.nav_profile) { selectedFragment = new ProfileFragment(); title = "我的"; }

@@ -24,6 +24,7 @@ import com.exampl.antiaddiction.R;
 import com.exampl.antiaddiction.activity.LoginActivity; // 假设你有登录页
 import com.exampl.antiaddiction.cloudbase.CloudBaseCallback;
 import com.exampl.antiaddiction.cloudbase.CloudBaseClient;
+import com.exampl.antiaddiction.data.common.UserIdNormalizer;
 import com.exampl.antiaddiction.manager.UserManager;
 import com.exampl.antiaddiction.utils.Utils;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -134,19 +135,24 @@ public class ProfileFragment extends Fragment {
                     return;
                 }
 
-                // 1. 获取这唯一的一行数据
-                int l= data.size();
-                Map<String, Object> codeData = data.get(l-1);
-                Log.d("code",data.toString());
-                Log.d("code",codeData.toString());
-
-                // 2. 本地对比邀请码是否正确（因为没有 where 过滤）
-                String dbCode = String.valueOf(codeData.get("code"));
-                if (!inputCode.equals(dbCode)) {
+                Map<String, Object> codeData = null;
+                for (Map<String, Object> row : data) {
+                    if (row == null) {
+                        continue;
+                    }
+                    String dbCode = String.valueOf(row.get("code"));
+                    if (inputCode.equals(dbCode)) {
+                        codeData = row;
+                        break;
+                    }
+                }
+                Log.d("code", data.toString());
+                if (codeData == null) {
                     Toast.makeText(getContext(), "邀请码不正确", Toast.LENGTH_SHORT).show();
-                    Log.w("code",inputCode+":"+dbCode);
+                    Log.w("code", "no row matched input=" + inputCode);
                     return;
                 }
+                Log.d("code", codeData.toString());
 
                 // 3. 时间校验逻辑 (替换 Timer() 为 System.currentTimeMillis())
                 long now = System.currentTimeMillis();
@@ -158,8 +164,8 @@ public class ProfileFragment extends Fragment {
                     return;
                 }
 
-                // 4. 拿到监管者的 ID（对应字段 inviterId）
-                String supervisorId = String.valueOf(codeData.get("inviterId"));
+                // 4. 拿到监管者的 ID（对应字段 inviterId），与登录态、云端查询统一做 normalize
+                String supervisorId = UserIdNormalizer.normalize(String.valueOf(codeData.get("inviterId")));
 
                 // 5. 修改自律者（自己）的 boundUserId 字段
                 Map<String, Object> bindBody = new HashMap<>();
@@ -208,7 +214,8 @@ public class ProfileFragment extends Fragment {
     }
     private void showSupervisorBindingUI() {
         String inviteCode = Utils.generateRandomCode(6);
-        String currentUserId = UserManager.getInstance(requireContext()).getUserId();
+        String currentUserId = UserIdNormalizer.normalize(
+                UserManager.getInstance(requireContext()).getUserId());
 
         // 1. 准备新数据
         Map<String, Object> body = new HashMap<>();

@@ -1,6 +1,9 @@
 package com.exampl.antiaddiction.fragment;
 
+import android.content.Context;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -27,6 +30,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class CalendarFragment extends Fragment {
 
@@ -37,6 +42,9 @@ public class CalendarFragment extends Fragment {
     private TextView tvUsageTotal;
     private TextView tvOverLimitApps;
     private TextView tvTaskSummary;
+    private final ExecutorService dbExecutor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private volatile String latestRequestedDate = "";
 
     @Nullable
     @Override
@@ -71,42 +79,50 @@ public class CalendarFragment extends Fragment {
     }
 
     private void loadCalendarData(String date) {
+        latestRequestedDate = date;
         // 1. 更新标题提示
         tvDateHint.setText(date + " 使用概览");
 
-        // 2. 加载任务列表
-        loadTasksFromDb(date);
-
-        // 3. 加载每日使用统计
-        loadUsageSummary(date);
+        // 2/3. 异步加载任务与使用统计，避免主线程查询 Room
+        loadCalendarDataAsync(date);
     }
 
-    private void loadTasksFromDb(String date) {
-        // 直接从 Room 查数据
-        // 注意：因为我们在 AppDatabase 开启了 allowMainThreadQueries，所以这里可以直接查
-        List<TodoItem> tasks = AppDatabase.getInstance(requireContext())
-                .todoDao()
-                .getTasksByDate(date);
-        if (tasks == null) {
-            tasks = new ArrayList<>();
+    private void loadCalendarDataAsync(String date) {
+        Context context = getContext();
+        if (!isAdded() || context == null) {
+            return;
         }
-        // 日历视图优先展示未完成任务，再展示已完成任务
-        Collections.sort(tasks, Comparator
-                .comparingInt((TodoItem t) -> t.status == 2 ? 1 : 0)
-                .thenComparing(t -> t.priority == null ? "中" : t.priority));
+        Context appContext = context.getApplicationContext();
+        dbExecutor.execute(() -> {
+            List<TodoItem> tasks = AppDatabase.getInstance(appContext)
+                    .todoDao()
+                    .getTasksByDate(date);
+            if (tasks == null) {
+                tasks = new ArrayList<>();
+            }
+            Collections.sort(tasks, Comparator
+                    .comparingInt((TodoItem t) -> t.status == 2 ? 1 : 0)
+                    .thenComparing(t -> t.priority == null ? "中" : t.priority));
 
-        // 4. 把查到的数据喂给 Adapter
-        if(adapter!=null) {
-            adapter.updateList(tasks);
-        }
-        updateTaskSummary(tasks);
+            DailyUsageRecord record = AppDatabase.getInstance(appContext)
+                    .dailyUsageDao()
+                    .getByDate(date);
+
+            List<TodoItem> finalTasks = tasks;
+            mainHandler.post(() -> {
+                if (!isAdded() || !date.equals(latestRequestedDate)) {
+                    return;
+                }
+                if (adapter != null) {
+                    adapter.updateList(finalTasks);
+                }
+                updateTaskSummary(finalTasks);
+                renderUsageSummary(record);
+            });
+        });
     }
 
-    private void loadUsageSummary(String date) {
-        DailyUsageRecord record = AppDatabase.getInstance(requireContext())
-                .dailyUsageDao()
-                .getByDate(date);
-
+    private void renderUsageSummary(DailyUsageRecord record) {
         if (record == null) {
             tvUsageTotal.setText("应用总时长: 暂无记录");
             tvOverLimitApps.setText("超额应用: 无");
@@ -120,6 +136,18 @@ public class CalendarFragment extends Fragment {
         } else {
             tvOverLimitApps.setText("超额应用: " + android.text.TextUtils.join("、", overApps));
         }
+    }
+
+    @Override
+    public void onDestroyView() {
+        mainHandler.removeCallbacksAndMessages(null);
+        super.onDestroyView();
+    }
+
+    @Override
+    public void onDestroy() {
+        dbExecutor.shutdownNow();
+        super.onDestroy();
     }
 
     private void updateTaskSummary(List<TodoItem> tasks) {

@@ -16,17 +16,15 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.exampl.antiaddiction.R;
 import com.exampl.antiaddiction.model.AppUsageInfo;
+import com.exampl.antiaddiction.model.ChildDashboardItem;
 import com.exampl.antiaddiction.manager.UserManager;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAdapter.VH> {
 
-    private List<Map<String, Object>> dataList; // 存储每个自律者的综合信息
+    private List<ChildDashboardItem> dataList; // 存储每个自律者的综合信息
     private boolean isSupervisor;
     private OnLimitSetListener listener;
 
@@ -36,7 +34,7 @@ public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAd
         void onViewAppUsage(AppUsageInfo app, Double limitMinutes);
     }
 
-    public ChildDashboardAdapter(List<Map<String, Object>> dataList, boolean isSupervisor, OnLimitSetListener listener) {
+    public ChildDashboardAdapter(List<ChildDashboardItem> dataList, boolean isSupervisor, OnLimitSetListener listener) {
         this.dataList = dataList;
         Log.d("ANTI_LOG_DATALIST",dataList.toString());
         this.isSupervisor = isSupervisor;
@@ -53,26 +51,18 @@ public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAd
     @Override
     public void onBindViewHolder(@NonNull VH holder, int position) {
         Context context = holder.itemView.getContext();
-        Map<String, Object> item = dataList.get(position);
-        String userId = String.valueOf(item.get("userId"));
+        ChildDashboardItem item = dataList.get(position);
+        String userId = item == null ? "" : item.userId;
         String name = resolveDisplayName(item, context);
         holder.tvName.setText(name);
 
-        long totalMillis = 0L;
-        Object totalObj = item.get("totalTime");
-        if (totalObj instanceof Number) {
-            totalMillis = ((Number) totalObj).longValue();
-        }
+        long totalMillis = item == null ? 0L : item.totalTime;
         holder.tvTotal.setText(formatTime(totalMillis));
 
         // 进度条逻辑 (假设总限额存在)
-        Integer totalLimit = null;
-        Object totalLimitObj = item.get("totalLimit");
-        if (totalLimitObj instanceof Number) {
-            int parsed = ((Number) totalLimitObj).intValue();
-            if (parsed > 0) {
-                totalLimit = parsed;
-            }
+        Integer totalLimit = item == null ? null : item.totalLimit;
+        if (totalLimit != null && totalLimit <= 0) {
+            totalLimit = null;
         }
         if (totalLimit == null) {
             holder.pb.setVisibility(View.GONE);
@@ -86,24 +76,9 @@ public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAd
                 : "总限额：" + totalLimit + " 分钟");
 
         // 加载 App 列表
-        String appJson = item.get("appJson") == null ? "[]" : String.valueOf(item.get("appJson"));
-        List<AppUsageInfo> apps = new Gson().fromJson(appJson, new TypeToken<List<AppUsageInfo>>(){}.getType());
-        if (apps == null) {
-            apps = java.util.Collections.emptyList();
-        }
+        List<AppUsageInfo> apps = item == null ? java.util.Collections.emptyList() : item.parseApps();
 
-        Map<String, Double> appLimitsMap = null;
-        Object appLimitsObj = item.get("appLimits");
-        if (appLimitsObj != null) {
-            try {
-                appLimitsMap = new Gson().fromJson(String.valueOf(appLimitsObj), new TypeToken<Map<String, Double>>(){}.getType());
-            } catch (Exception ignore) {
-                appLimitsMap = new HashMap<>();
-            }
-        }
-        if (appLimitsMap == null) {
-            appLimitsMap = new HashMap<>();
-        }
+        Map<String, Double> appLimitsMap = item == null ? new java.util.HashMap<>() : item.parseAppLimits();
 
         // 恢复图标 (由于从云端拿的JSON没图标，需要本地PackageManager恢复)
         PackageManager pm = holder.itemView.getContext().getPackageManager();
@@ -145,20 +120,14 @@ public class ChildDashboardAdapter extends RecyclerView.Adapter<ChildDashboardAd
         return String.format("%02dh %02dm", hours, minutes);
     }
 
-    private String resolveDisplayName(Map<String, Object> item, Context context) {
-        Object usernameObj = item.get("username");
-        if (usernameObj != null) {
-            String username = String.valueOf(usernameObj).trim();
-            if (!username.isEmpty() && !"null".equalsIgnoreCase(username)) {
-                return username;
-            }
+    private String resolveDisplayName(ChildDashboardItem item, Context context) {
+        if (item != null && item.username != null) {
+            String username = item.username.trim();
+            if (!username.isEmpty()) return username;
         }
-        Object nicknameObj = item.get("nickname");
-        if (nicknameObj != null) {
-            String nickname = String.valueOf(nicknameObj).trim();
-            if (!nickname.isEmpty() && !"null".equalsIgnoreCase(nickname)) {
-                return nickname;
-            }
+        if (item != null && item.nickname != null) {
+            String nickname = item.nickname.trim();
+            if (!nickname.isEmpty()) return nickname;
         }
         return UserManager.getInstance(context).getUsername();
     }
